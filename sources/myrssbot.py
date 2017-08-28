@@ -3,7 +3,7 @@
 Script:
     myrss.py
 Description:
-    Telegram Bot that let you subscribe and follow customs RSS Feeds.
+    Telegram Bot that let you subscribe and follow customs RSS, CDF and ATOM Feeds.
 Author:
     Jose Rios Rubio
 Creation date:
@@ -11,13 +11,16 @@ Creation date:
 Last modified date:
     28/08/2017
 Version:
-    0.3.0
+    0.4.0
 '''
 
 ####################################################################################################
 
 ### Imported modules ###
+import feedparser
 from os import path
+from time import sleep
+from threading import Thread, Lock
 from collections import OrderedDict
 from telegram import MessageEntity, ParseMode, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, RegexHandler, \
@@ -29,21 +32,78 @@ from constants import CONST, TEXT
 ####################################################################################################
 
 ### Globals ###
+threads = []
+threads_lock = Lock()
 
+####################################################################################################
+
+### Class for chats Feedparser threads ###
+class C_chatFeed(Thread):
+    '''Threaded chat feed class to manage each chat feedparser'''
+    def __init__(self, args):
+        ''' Class constructor'''
+        Thread.__init__(self)
+        self.chat_id = args[0]
+        self.bot = args[1]
+        self.end = False
+        self.lock = Lock()
+
+    def get_id(self):
+        '''Get thread ID (chat ID)'''
+        return self.chat_id
+
+    def finish(self):
+        '''Set to finish the thread (end run method)'''
+        self.lock.acquire()
+        self.end = True
+        self.lock.release()
+
+    def run(self):
+        '''thread method that run when the thread is launched (thread.start() is call)'''
+        actual_feeds = {'Title': '', 'Subtitle' : '', 'Link' : '', 'Feeds' : [[]]}
+        fjson_chat_feeds = TSjson.TSjson('{}/{}.json'.format(CONST['USERS_DIR'], self.chat_id))
+        feeds_urls = fjson_chat_feeds.read_content()
+        feeds_urls = feeds_urls['Feeds']
+        bot_msg = CONST['ACTUAL_FEED']
+        x = 0
+        for url in feeds_urls:
+            feed = feedparser.parse(url)
+            actual_feeds['Title'] = feed['feed']['title']
+            actual_feeds['Link'] = feed['feed']['link']
+            actual_feeds['Subtitle'] = feed.feed.subtitle
+            for y in xrange(0, len(feed['entries']), 1):
+                actual_feeds['Feeds'][x][y] = feed['entries'][0]['title'] 
+            x = x + 1
+            bot_msg = '{}Title:\n{}\n\nDescription:\n{}\n\nLink:\n{}\n\n'.format(bot_msg, \
+                    actual_feeds['Title'], actual_feeds['Subtitle'], actual_feeds['Link'])
+        self.bot.sendMessage(chat_id=self.chat_id, text=bot_msg)
+        while(not self.end):
+            fjson_chat_feeds = TSjson.TSjson('{}/{}.json'.format(CONST['USERS_DIR'], self.id))
+            feeds_urls = fjson_chat_feeds.read_content()
+            feeds_urls = feeds_urls[0]
+            i = 0
+            for url in feeds_urls:
+                feed = feedparser.parse(url)
+                actual_feeds['Title'] = feed['feed']['title']
+                actual_feeds['Link'] = feed['feed']['link']
+                actual_feeds['Subtitle'] = feed.feed.subtitle
+                feed['entries'][0]['title']
+                i = i + 1
+            sleep(CONST['T_USER_FEEDS'])
 
 ####################################################################################################
 
 ### Functions ###
 def signup_user(update):
     '''Function for sign-up a user in the system (add to users list file)'''
-    # Initial user data for users list file and chat feeds file
+    # Initial user data for users list file
     usr_data = OrderedDict([])
     # Set user data for users list json file
     usr_data['Name'] = update.message.from_user.name
     usr_data['User_id'] = update.message.from_user.id
     usr_data['Sign_date'] = (update.message.date).now().strftime('%Y-%m-%d %H:%M:%S')
     usr_data['Chats'] = []
-    # Create TSjson object for each file (list of users and chat feeds) and write on them the data
+    # Create TSjson object for list of users and write on them the data
     fjson_usr_list = TSjson.TSjson(CONST['USERS_LIST_FILE'])
     fjson_usr_list.write_content(usr_data)
 
@@ -66,8 +126,8 @@ def subscribed(chat_id, feed_url):
     _subscribed = False
     chat_file = '{}/{}.json'.format(CONST['CHATS_DIR'], chat_id)
     if path.exists(chat_file):
-        fjson_usr_feeds = TSjson.TSjson(chat_file)
-        subs_feeds = fjson_usr_feeds.read_content()
+        fjson_chat_feeds = TSjson.TSjson(chat_file)
+        subs_feeds = fjson_chat_feeds.read_content()
         if subs_feeds:
             subs_feeds = subs_feeds[0]
             for feed in subs_feeds['Feeds']:
@@ -88,17 +148,17 @@ def add_feed(user_id, chat_id, feed_url):
                 usr['Chats'].append(chat_id)
                 fjson_usr_list.update(usr, 'User_id')
     # Read chat feeds file and add the new feed url to it
-    fjson_usr_feeds = TSjson.TSjson('{}/{}.json'.format(CONST['CHATS_DIR'], chat_id))
-    subs_feeds = fjson_usr_feeds.read_content()
+    fjson_chat_feeds = TSjson.TSjson('{}/{}.json'.format(CONST['CHATS_DIR'], chat_id))
+    subs_feeds = fjson_chat_feeds.read_content()
     if subs_feeds:
         subs_feeds = subs_feeds[0]
         subs_feeds['Feeds'].append(feed_url)
-        fjson_usr_feeds.update(subs_feeds, 'Chat_id')
+        fjson_chat_feeds.update(subs_feeds, 'Chat_id')
     else:
         usr_feeds = OrderedDict([])
         usr_feeds['Chat_id'] = chat_id
         usr_feeds['Feeds'] = [feed_url]
-        fjson_usr_feeds.write_content(usr_feeds)
+        fjson_chat_feeds.write_content(usr_feeds)
 
 ####################################################################################################
 
@@ -151,6 +211,44 @@ def cmd_add(bot, update, args):
     else: # The user is not allowed (needs to sign-up)
         update.message.reply_text(TEXT['CMD_NOT_ALLOW']) # Bot reply
 
+
+def cmd_enable(bot, update):
+    '''/enable command handler'''
+    global threads
+    global threads_lock
+    chat_id = update.message.chat_id # Get the chat id
+    # Create and launch chat feeds threads
+    thr_feed = C_chatFeed(args=(chat_id, bot))
+    #thr_feed.setDaemon(True)
+    if not thr_feed.isAlive():
+        threads_lock.acquire()
+        threads.append(thr_feed)
+        threads_lock.release()
+        thr_feed.start()
+        bot_response = TEXT['ENA_ENABLED'] # Bot response
+    else:
+        bot_response = TEXT['ENA_NOT_DISABLED'] # Bot response
+    update.message.reply_text(bot_response) # Bot reply
+
+
+def cmd_disable(bot, update):
+    global threads
+    global threads_lock
+    chat_id = update.message.chat_id # Get the chat id
+    bot_response = TEXT['DIS_NOT_SUBS'] # Bot response
+    for thr_feed in threads:
+        if thr_feed.get_id() == chat_id:
+            if thr_feed.isAlive():
+                thr_feed.finish()
+                threads_lock.acquire()
+                threads.remove(thr_feed)
+                threads_lock.release()
+                bot_response = TEXT['DIS_DISABLED'] # Bot response
+            else:
+                bot_response = TEXT['DIS_NOT_ENABLED'] # Bot response
+            break
+    update.message.reply_text(bot_response) # Bot reply
+
 ####################################################################################################
 
 ### Main function ###
@@ -164,6 +262,8 @@ def main():
     disp.add_handler(CommandHandler("help", cmd_help))
     disp.add_handler(CommandHandler("signup", cmd_signup, pass_args=True))
     disp.add_handler(CommandHandler("add", cmd_add, pass_args=True))
+    disp.add_handler(CommandHandler("enable", cmd_enable))
+    disp.add_handler(CommandHandler("disable", cmd_disable))
     # Start the Bot polling ignoring pending messages (clean=True)
     updater.start_polling(clean=True)
     # Set the bot to idle (actual main-thread stops and wait for incoming messages for the handlers)

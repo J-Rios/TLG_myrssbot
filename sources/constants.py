@@ -11,7 +11,7 @@ Creation date:
 Last modified date:
     28/08/2017
 Version:
-    0.3.0
+    0.4.0
 '''
 
 ####################################################################################################
@@ -20,16 +20,17 @@ Version:
 CONST = {
     'DEVELOPER' : '@JoseTLG', # Developer Telegram contact
     'DATE' : '28/08/2017', # Last modified date
-    'VERSION' : '0.3.0', # Actual version
+    'VERSION' : '0.4.0', # Actual version
     'TOKEN' : 'XXXXXXXXX:XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', # Bot Token (get it from @BotFather)
     'REG_KEY' : 'registrationKey1234', # User registration Key (for signup and let use the Bot)
-    'CHATS_DIR' : './data/chats', # Path of users data directory
+    'CHATS_DIR' : './data/chats', # Path of chats data directory
     'USERS_LIST_FILE' : './data/users_list.json', # Json file of signed-up users list
+    'T_USER_FEEDS' : 600 # User time between feeds check (600s -> 10m)
 }
 
 TEXT = {
     'START' : \
-        'I am a feed parser Bot, that let you subscribe to multiple feeds contents and handles ' \
+        'I am a feed parser Bot, that let you subscribe to multiple feeds contents, handles ' \
         'RSS, CDF and ATOM formats. I will notify you when a new feed comes out.\n' \
         '\n' \
         'Check the /help command for get usefull information about my use.',
@@ -70,11 +71,29 @@ TEXT = {
         '/add https://www.kickstarter.com/projects/feed.atom',
 
     'ADD_ALREADY_FEED' : \
-        'You are already subscribed to that feed',
+        'You are already subscribed to that feed.',
 
     'ADD_NO_ENTRIES' : \
-        'Invalid URL (no entries found in that feed)',
+        'Invalid URL (no entries found in that feed).',
 
     'ADD_FEED' : \
-        'Feed added. Now you are subscribed to:\n'
+        'Feed added. Now you are subscribed to:\n',
+
+    'ENA_NOT_DISABLED' : \
+        'I am already enabled.',
+
+    'ENA_ENABLED' : \
+        'Feeds notifications enabled. Stop It with /disable command when you want.',
+
+    'DIS_NOT_SUBS' : \
+        'There is no feeds subscriptions in the actual chat.',
+
+    'DIS_NOT_ENABLED' : \
+        'I am already disabled.',
+
+    'DIS_DISABLED' : \
+        'Feeds notifications disabled. Start It with /enable command when you want.',
+
+    'ACTUAL_FEED' : \
+        'Actual Feed:\n----------------------\n'
 }
