@@ -9,19 +9,19 @@ Author:
 Creation date:
     23/08/2017
 Last modified date:
-    28/08/2017
+    30/08/2017
 Version:
-    0.4.0
+    0.5.0
 '''
 
 ####################################################################################################
 
 ### Imported modules ###
-import feedparser
 from os import path
 from time import sleep
 from threading import Thread, Lock
 from collections import OrderedDict
+from feedparser import parse
 from telegram import MessageEntity, ParseMode, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, RegexHandler, \
                          ConversationHandler, CallbackQueryHandler
@@ -37,8 +37,8 @@ threads_lock = Lock()
 
 ####################################################################################################
 
-### Class for chats Feedparser threads ###
-class C_chatFeed(Thread):
+### Class for chats FeedReader threads ###
+class CchatFeed(Thread):
     '''Threaded chat feed class to manage each chat feedparser'''
     def __init__(self, args):
         ''' Class constructor'''
@@ -53,47 +53,132 @@ class C_chatFeed(Thread):
         return self.chat_id
 
     def finish(self):
-        '''Set to finish the thread (end run method)'''
+        '''Set to finish the thread and kill it (from TLG /disable command)'''
         self.lock.acquire()
         self.end = True
         self.lock.release()
 
     def run(self):
         '''thread method that run when the thread is launched (thread.start() is call)'''
-        actual_feeds = {'Title': '', 'Subtitle' : '', 'Link' : '', 'Feeds' : [[]]}
-        fjson_chat_feeds = TSjson.TSjson('{}/{}.json'.format(CONST['USERS_DIR'], self.chat_id))
+        # Read all feeds urls of chat file (by chat_id)
+        last_feeds = {'Title': '', 'Subtitle' : '', 'Link' : '', 'Entries' : []}
+        actual_feeds = {'Title': '', 'Subtitle' : '', 'Link' : '', 'Entries' : []}
+        fjson_chat_feeds = TSjson.TSjson('{}/{}.json'.format(CONST['CHATS_DIR'], self.chat_id))
         feeds_urls = fjson_chat_feeds.read_content()
-        feeds_urls = feeds_urls['Feeds']
-        bot_msg = CONST['ACTUAL_FEED']
-        x = 0
+        feeds_urls = feeds_urls[0]['Feeds']
+        # For each feed url
         for url in feeds_urls:
-            feed = feedparser.parse(url)
-            actual_feeds['Title'] = feed['feed']['title']
-            actual_feeds['Link'] = feed['feed']['link']
-            actual_feeds['Subtitle'] = feed.feed.subtitle
-            for y in xrange(0, len(feed['entries']), 1):
-                actual_feeds['Feeds'][x][y] = feed['entries'][0]['title'] 
-            x = x + 1
-            bot_msg = '{}Title:\n{}\n\nDescription:\n{}\n\nLink:\n{}\n\n'.format(bot_msg, \
-                    actual_feeds['Title'], actual_feeds['Subtitle'], actual_feeds['Link'])
-        self.bot.sendMessage(chat_id=self.chat_id, text=bot_msg)
+            # Parse and get feed data
+            feedparse = parse(url)
+            actual_feeds['Title'] = feedparse['feed']['title']
+            #actual_feeds['Subtitle'] = feedparse['feed']['subtitle']
+            actual_feeds['Link'] = feedparse['feed']['link']
+            # Determine number of entries to show
+            #for i in range(0, len(feedparse['entries']), 1):
+            if len(feedparse['entries']) >= CONST['NUM_SHOW_ENTRIES']:
+                entries_to_show = CONST['NUM_SHOW_ENTRIES']
+            else:
+                entries_to_show = len(feedparse['entries'])
+            # If any entry
+            if entries_to_show:
+                # For entries to show, get entry data
+                for i in range(entries_to_show-1, -1, -1):
+                    entry = {'Title': '', 'Published' : '', 'Summary' : '', 'Link' : ''}
+                    entry['Title'] = feedparse['entries'][i]['title']
+                    entry['Published'] = feedparse['entries'][i]['published']
+                    entry['Summary'] = feedparse['entries'][i]['summary']
+                    entry['Link'] = feedparse['entries'][i]['link']
+                    # Truncate entry summary if it is more than MAX_ENTRY_SUMMARY chars
+                    if len(entry['Summary']) > CONST['MAX_ENTRY_SUMMARY']:
+                        entry['Summary'] = entry['Summary'][0:CONST['MAX_ENTRY_SUMMARY']]
+                        entry['Summary'] = '{}...'.format(entry['Summary'])
+                    # Add feed entry data to actual feeds variable
+                    actual_feeds['Entries'].append(entry)
+                # Send the telegram message/s
+                last_entry = actual_feeds['Entries'][entries_to_show-1]
+                bot_msg = 'Feed:\n{}{}Link:\n{}{}\nLast entry:\n\n{}\n{}\n\n{}\n\n{}'.format( \
+                        actual_feeds['Title'], TEXT['LINE'], actual_feeds['Link'], TEXT['LINE'], \
+                        last_entry['Title'], last_entry['Published'], last_entry['Summary'], \
+                        last_entry['Link'])
+                bot_msg = split_tlg_msgs(bot_msg)
+                for msg in bot_msg:
+                    self.bot.sendMessage(chat_id=self.chat_id, text=msg)
+            # Add all feed data to last feeds variable
+            last_feeds = actual_feeds.copy()
+        # While not end the thread (finish() method call from /disable command)
         while(not self.end):
-            fjson_chat_feeds = TSjson.TSjson('{}/{}.json'.format(CONST['USERS_DIR'], self.id))
+            # Read the actual feeds urls of chat file (by chat_id), searching for changes
+            actual_feeds = {'Title': '', 'Subtitle' : '', 'Link' : '', 'Entries' : []}
             feeds_urls = fjson_chat_feeds.read_content()
-            feeds_urls = feeds_urls[0]
-            i = 0
+            feeds_urls = feeds_urls[0]['Feeds']
+            # For each feed url
             for url in feeds_urls:
-                feed = feedparser.parse(url)
-                actual_feeds['Title'] = feed['feed']['title']
-                actual_feeds['Link'] = feed['feed']['link']
-                actual_feeds['Subtitle'] = feed.feed.subtitle
-                feed['entries'][0]['title']
-                i = i + 1
+                # Parse and get feed data and entries data
+                feedparse = parse(url)
+                actual_feeds['Title'] = feedparse['feed']['title']
+                # Determine number of entries to show
+                #for i in range(0, len(feedparse['entries']), 1):
+                if len(feedparse['entries']) >= CONST['NUM_SHOW_ENTRIES']:
+                    entries_to_show = CONST['NUM_SHOW_ENTRIES']
+                else:
+                    entries_to_show = len(feedparse['entries'])
+                # If any entry (not 0)
+                if entries_to_show:
+                    # For entries to show, get entry data
+                    for i in range(entries_to_show-1, -1, -1):
+                        entry = {'Title': '', 'Published' : '', 'Summary' : '', 'Link' : ''}
+                        entry['Title'] = feedparse['entries'][i]['title']
+                        entry['Published'] = feedparse['entries'][i]['published']
+                        entry['Summary'] = feedparse['entries'][i]['summary']
+                        entry['Link'] = feedparse['entries'][i]['link']
+                        # Truncate entry summary if it is more than MAX_ENTRY_SUMMARY chars
+                        if len(entry['Summary']) > CONST['MAX_ENTRY_SUMMARY']:
+                            entry['Summary'] = entry['Summary'][0:CONST['MAX_ENTRY_SUMMARY']]
+                            entry['Summary'] = '{}...'.format(entry['Summary'])
+                        # Add feed entry data to actual feeds variable
+                        actual_feeds['Entries'].append(entry)
+                        # If it is a new entry
+                        if entry not in last_feeds['Entries']:
+                            # Send the telegram message/s
+                            bot_msg = '{}{}{}\n{}\n\n{}\n\n{}' \
+                                    .format(actual_feeds['Title'], TEXT['LINE'], entry['Title'], \
+                                    entry['Published'], entry['Summary'], \
+                                    entry['Link'])
+                            bot_msg = split_tlg_msgs(bot_msg)
+                            for msg in bot_msg:
+                                self.bot.sendMessage(chat_id=self.chat_id, text=msg)
+            # Add all feed data to last feeds variable
+            last_feeds = actual_feeds.copy()
             sleep(CONST['T_USER_FEEDS'])
 
 ####################################################################################################
 
 ### Functions ###
+def split_tlg_msgs(text_in):
+    '''Function for split a text in fragments of telegram allowed length message'''
+    text_out = []
+    num_char = len(text_in)
+    # Just one fragment if the length of the message is less than max chars allowed per TLG message
+    if num_char <= CONST['TLG_MSG_MAX_CHARS']:
+        text_out.append(text_in)
+    # Split the text in fragments if the length is higher than max chars allowed by TLG message
+    else:
+        # Determine the number of msgs to send and add 1 more msg if it is not an integer number
+        num_msgs = num_char/float(CONST['TLG_MSG_MAX_CHARS'])
+        #if isinstance(num_msgs, numbers.Integral) != True:
+        if isinstance(num_msgs, int) != True:
+            num_msgs = int(num_msgs) + 1
+        fragment = 0
+        # Create the output fragments list of messages
+        for _ in range(0, num_msgs, 1):
+            text_out.append(text_in[fragment:fragment+CONST['TLG_MSG_MAX_CHARS']])
+            #text_out.append(text_in[fragment:fragment+CONST['TLG_MSG_MAX_CHARS']].decode('utf-8', \
+            #        'ignore'))
+            fragment = fragment + CONST['TLG_MSG_MAX_CHARS']
+    # Return the result text/list-of-fragments
+    return text_out
+
+
 def signup_user(update):
     '''Function for sign-up a user in the system (add to users list file)'''
     # Initial user data for users list file
@@ -197,56 +282,58 @@ def cmd_add(bot, update, args):
         if len(args) == 1: # If 1 argument has been provided
             feed_url = args[0] # Get the feed url provided (argument)
             if not subscribed(chat_id, feed_url): # If user is not already subscribed to that feed
-                feed = feedparser.parse(feed_url) # Get the feedparse of that feed url
-                if feed['entries']: # If any entry
+                feed = parse(feed_url) # Get the feedparse of that feed url
+                if feed['bozo'] == 0: # If valid feed
                     add_feed(user_id, chat_id, feed_url) # Add the feed url to the chat feeds file
                     bot_response = '{}{}'.format(TEXT['ADD_FEED'], feed_url) # Bot response
-                else: # No entries in that feed
-                    bot_response = '{}'.format(TEXT['ADD_NO_ENTRIES']) # Bot response
-                update.message.reply_text(bot_response) # Bot reply
+                else: # No valid feed
+                    bot_response = TEXT['ADD_NO_ENTRIES'] # Bot response
             else: # Already subscribed to that feed
-                update.message.reply_text(TEXT['ADD_ALREADY_FEED']) # Bot reply
+                bot_response = TEXT['ADD_ALREADY_FEED'] # Bot reply
         else: # No argument or more than 1 argument provided
-            update.message.reply_text(TEXT['ADD_NOT_ARG']) # Bot reply
+            bot_response = TEXT['ADD_NOT_ARG'] # Bot reply
     else: # The user is not allowed (needs to sign-up)
-        update.message.reply_text(TEXT['CMD_NOT_ALLOW']) # Bot reply
+        bot_response = TEXT['CMD_NOT_ALLOW'] # Bot reply
+    update.message.reply_text(bot_response) # Bot reply
 
 
 def cmd_enable(bot, update):
     '''/enable command handler'''
-    global threads
-    global threads_lock
+    global threads # Use global variable for active threads
+    global threads_lock # Use the global lock for active threads
+    thr_actives_id = [] # Initial list of active threads IDs empty
     chat_id = update.message.chat_id # Get the chat id
-    # Create and launch chat feeds threads
-    thr_feed = C_chatFeed(args=(chat_id, bot))
-    #thr_feed.setDaemon(True)
-    if not thr_feed.isAlive():
-        threads_lock.acquire()
-        threads.append(thr_feed)
-        threads_lock.release()
-        thr_feed.start()
-        bot_response = TEXT['ENA_ENABLED'] # Bot response
-    else:
+    for thr_feed in threads: # For each active thread
+        thr_actives_id.append(thr_feed.get_id()) # Get the active thread ID
+    if chat_id not in thr_actives_id: # If the actual chat is not in the active threads
+        thr_feed = CchatFeed(args=(chat_id, bot)) # Create and launch actual chat feeds threads
+        #thr_feed.setDaemon(True) # Set the thread as daemon
+        if not thr_feed.isAlive(): # Make sure that the thread is really active
+            threads_lock.acquire() # Lock the active threads variable
+            threads.append(thr_feed) # Add actual thread to the active threads variable
+            threads_lock.release() # Release the active threads variable lock
+            thr_feed.start() # Launch the thread
+            bot_response = TEXT['ENA_ENABLED'] # Bot response
+    else: # Actual chat feeds thread currently running
         bot_response = TEXT['ENA_NOT_DISABLED'] # Bot response
     update.message.reply_text(bot_response) # Bot reply
 
 
 def cmd_disable(bot, update):
-    global threads
-    global threads_lock
+    global threads # Use global variable for active threads
+    global threads_lock # Use the global lock for active threads
+    thr_actives_id = [] # Initial list of active threads IDs empty
     chat_id = update.message.chat_id # Get the chat id
-    bot_response = TEXT['DIS_NOT_SUBS'] # Bot response
-    for thr_feed in threads:
-        if thr_feed.get_id() == chat_id:
-            if thr_feed.isAlive():
-                thr_feed.finish()
-                threads_lock.acquire()
-                threads.remove(thr_feed)
-                threads_lock.release()
-                bot_response = TEXT['DIS_DISABLED'] # Bot response
-            else:
-                bot_response = TEXT['DIS_NOT_ENABLED'] # Bot response
-            break
+    bot_response = TEXT['DIS_NOT_ENABLED'] # Bot response
+    for thr_feed in threads: # For each active thread
+        thr_actives_id.append(thr_feed.get_id()) # Get the active thread ID
+    if chat_id in thr_actives_id: # If the actual chat is in the active threads
+        if thr_feed.isAlive(): # Make sure that the thread is really active
+            thr_feed.finish() # Finish the thread
+            threads_lock.acquire() # Lock the active threads variable
+            threads.remove(thr_feed) # Remove actual thread from the active threads variable
+            threads_lock.release() # Release the active threads variable lock
+            bot_response = TEXT['DIS_DISABLED'] # Bot response
     update.message.reply_text(bot_response) # Bot reply
 
 ####################################################################################################

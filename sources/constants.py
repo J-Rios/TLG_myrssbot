@@ -9,9 +9,9 @@ Author:
 Creation date:
     23/08/2017
 Last modified date:
-    28/08/2017
+    30/08/2017
 Version:
-    0.4.0
+    0.5.0
 '''
 
 ####################################################################################################
@@ -19,13 +19,16 @@ Version:
 ### Constants ###
 CONST = {
     'DEVELOPER' : '@JoseTLG', # Developer Telegram contact
-    'DATE' : '28/08/2017', # Last modified date
-    'VERSION' : '0.4.0', # Actual version
+    'DATE' : '30/08/2017', # Last modified date
+    'VERSION' : '0.5.0', # Actual version
     'TOKEN' : 'XXXXXXXXX:XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', # Bot Token (get it from @BotFather)
     'REG_KEY' : 'registrationKey1234', # User registration Key (for signup and let use the Bot)
     'CHATS_DIR' : './data/chats', # Path of chats data directory
     'USERS_LIST_FILE' : './data/users_list.json', # Json file of signed-up users list
-    'T_USER_FEEDS' : 600 # User time between feeds check (600s -> 10m)
+    'TLG_MSG_MAX_CHARS' : 4095, # Max number of characters per message allowed by Telegram
+    'MAX_ENTRY_SUMMARY' : 500, # Max number of characters in entry summary (description)
+    'NUM_SHOW_ENTRIES' : 5, # Number of max entries to monitorize and show
+    'T_USER_FEEDS' : 10 # User time between feeds check (600s -> 10m)
 }
 
 TEXT = {
@@ -85,15 +88,12 @@ TEXT = {
     'ENA_ENABLED' : \
         'Feeds notifications enabled. Stop It with /disable command when you want.',
 
-    'DIS_NOT_SUBS' : \
-        'There is no feeds subscriptions in the actual chat.',
-
     'DIS_NOT_ENABLED' : \
         'I am already disabled.',
 
     'DIS_DISABLED' : \
         'Feeds notifications disabled. Start It with /enable command when you want.',
 
-    'ACTUAL_FEED' : \
-        'Actual Feed:\n----------------------\n'
+    'LINE' : \
+        '\n———————————————————\n'
 }
