@@ -11,7 +11,7 @@ Creation date:
 Last modified date:
     30/08/2017
 Version:
-    0.5.0
+    0.6.0
 '''
 
 ####################################################################################################
@@ -20,7 +20,7 @@ Version:
 CONST = {
     'DEVELOPER' : '@JoseTLG', # Developer Telegram contact
     'DATE' : '30/08/2017', # Last modified date
-    'VERSION' : '0.5.0', # Actual version
+    'VERSION' : '0.6.0', # Actual version
     'TOKEN' : 'XXXXXXXXX:XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', # Bot Token (get it from @BotFather)
     'REG_KEY' : 'registrationKey1234', # User registration Key (for signup and let use the Bot)
     'CHATS_DIR' : './data/chats', # Path of chats data directory
@@ -62,6 +62,23 @@ TEXT = {
         'Sign-up success. Created an account for your user, now you are free to use all the ' \
         'commands, enjoy!',
 
+    'SIGNDOWN_SURE' : \
+        'The /signdown command will delete your account, all the feeds that you have added ' \
+        'will be lose. If you are sure to do this, you have to use the next statement:\n' \
+        '\n' \
+        '/signdown iamsuretoremovemyaccount',
+
+    'NO_EXIST_USER' : \
+        'You does not have an account yet.',
+
+    'SIGNDOWN_CONFIRM_INVALID' : \
+        'Invalid confirmation. If you are sure to do this, you have to use the next statement:\n' \
+        '\n' \
+        '/signdown iamsuretoremovemyaccount',
+
+    'SIGNDOWN_SUCCESS' : \
+        'Sign-down success. Now you can create and start a new account with new feeds.',
+
     'CMD_NOT_ALLOW' : \
         'You are not allowed to use this command. First you need to get access, signing up in ' \
         'the Bot data base to create an account of your user. You can da that with the /signup ' \
@@ -82,8 +99,23 @@ TEXT = {
     'ADD_FEED' : \
         'Feed added. Now you are subscribed to:\n',
 
+    'RM_NOT_ARG' : \
+        'The command needs a feed url.\n' \
+        '\n' \
+        'Example:\n' \
+        '/remove https://www.kickstarter.com/projects/feed.atom',
+
+    'RM_NOT_SUBS' : \
+        'The chat does not have that feed added.',
+
+    'RM_FEED' : \
+        'Feed successfull removed.',
+
     'ENA_NOT_DISABLED' : \
         'I am already enabled.',
+
+    'ENA_NOT_SUBS' : \
+        'There is no feeds subscriptions yet.',
 
     'ENA_ENABLED' : \
         'Feeds notifications enabled. Stop It with /disable command when you want.',
@@ -93,6 +125,10 @@ TEXT = {
 
     'DIS_DISABLED' : \
         'Feeds notifications disabled. Start It with /enable command when you want.',
+
+    'FEEDREADER_ACTIVE' : \
+        'The FeedReader is active, to use that command you need to disable it. Run the command ' \
+        '/disable first.',
 
     'LINE' : \
         '\n———————————————————\n'

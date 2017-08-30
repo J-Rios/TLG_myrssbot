@@ -147,13 +147,32 @@ class TSjson(object):
                 found = True # Marcar que se ha encontrado la posicion
                 break # Interrumpir y salir del bucle
             i = i + 1 # Incrementar la posicion del dato
-        return found, i
+        return found, i # Devolvemos la tupla (encontrado, posicion)
+
+
+    def remove_by_uide(self, element_value, uide):
+        '''
+        Funcion para eliminar un dato json concreto dentro del archivo json a partir de un elemento identificador unico (uide)
+        [Nota: Cada dato json necesita al menos 1 elemento identificador unico (uide), si no es asi, la eliminacion se producira en el primer dato con dicho elemento uide que se encuentre]
+        '''
+        file_content = self.read_content() # Leer el contenido del archivo json
+        pos = -1 # Posicion inicial del dato dentro del contenido (-1, no encontrado)
+        i = 0 # Indice inicial de dato contenido
+        for data in file_content: # Para cada dato json contenido
+            if data[uide] == element_value: # Si el dato coincide con el buscado
+                pos = i # Dato encontrado en la posicion i
+                break # Interrumpir y salir del bucle
+            else: # El dato no coincide con el buscado
+                i = i + 1 # Incrementamos el indice
+        del file_content[pos] # Remove the item from that obtained position
+        self.clear_content() # Clear content of file
+        self.write_content(file_content) # Write the modified content (without the item)
 
 
     def search_by_uide(self, element_value, uide):
         '''
         Funcion para buscar un dato json concreto dentro del archivo json a partir de un elemento identificador unico (uide)
-        [Nota: Cada dato json necesita al menos 1 elemento identificador unico (uide), si no es asi, la actualizacion se producira en el primer elemento que se encuentre]
+        [Nota: Cada dato json necesita al menos 1 elemento identificador unico (uide), si no es asi, la actualizacion se producira en el primer dato con dicho elemento uide que se encuentre]
         '''
         result = dict() # Diccionario para el resultado de la busqueda
         result['found'] = False # Dato inicialmente no encontrado
@@ -170,7 +189,7 @@ class TSjson(object):
     def update(self, data, uide):
         '''
         Funcion para actualizar datos de un archivo json
-        [Nota: Cada dato json necesita al menos 1 elemento identificador unico (uide), si no es asi, la actualizacion se producira en el primer elemento que se encuentre]
+        [Nota: Cada dato json necesita al menos 1 elemento identificador unico (uide), si no es asi, la actualizacion se producira en el primer dato con dicho elemento uide que se encuentre]
         '''
         file_data = self.read() # Leer todo el archivo json
         
@@ -214,7 +233,7 @@ class TSjson(object):
 
 
     def clear_content(self):
-        '''Funcion para limpiar todos los datos de un archivo json (no se usa actualmente)'''
+        '''Funcion para limpiar todos los datos de un archivo json'''
         try: # Intentar abrir el archivo
             self.lock.acquire() # Cerramos (adquirimos) el mutex
             if os.path.exists(self.file_name) and os.stat(self.file_name).st_size: # Si el archivo existe y no esta vacio
@@ -227,7 +246,7 @@ class TSjson(object):
     
 
     def delete(self):
-        '''Funcion para eliminar un archivo json (no se usa actualmente)'''
+        '''Funcion para eliminar un archivo json'''
         self.lock.acquire() # Cerramos (adquirimos) el mutex
         if os.path.exists(self.file_name): # Si el archivo existe
             os.remove(self.file_name) # Eliminamos el archivo
