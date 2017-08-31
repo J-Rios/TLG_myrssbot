@@ -11,7 +11,7 @@ Creation date:
 Last modified date:
     31/08/2017
 Version:
-    0.7.0
+    0.8.0
 '''
 
 ####################################################################################################
@@ -48,9 +48,11 @@ class CchatFeed(Thread):
         self.end = False
         self.lock = Lock()
 
+
     def get_id(self):
         '''Get thread ID (chat ID)'''
         return self.chat_id
+
 
     def finish(self):
         '''Set to finish the thread and stop it execution (called from TLG /disable command)'''
@@ -58,29 +60,55 @@ class CchatFeed(Thread):
         self.end = True
         self.lock.release()
 
-    def run(self):
-        '''thread method that run when the thread is launched (thread.start() is call)'''
-        # Read all feeds urls of chat file (by chat_id)
-        last_feeds = {'Title': '', 'Subtitle' : '', 'Link' : '', 'Entries' : []}
-        actual_feeds = {'Title': '', 'Subtitle' : '', 'Link' : '', 'Entries' : []}
+
+    def split_tlg_msgs(self, text_in):
+        '''Function for split a text in fragments of telegram allowed length message'''
+        text_out = []
+        num_char = len(text_in)
+        # Just one fragment if the length of the message is less than max chars allowed per TLG message
+        if num_char <= CONST['TLG_MSG_MAX_CHARS']:
+            text_out.append(text_in)
+        # Split the text in fragments if the length is higher than max chars allowed by TLG message
+        else:
+            # Determine the number of msgs to send and add 1 more msg if it is not an integer number
+            num_msgs = num_char/float(CONST['TLG_MSG_MAX_CHARS'])
+            #if isinstance(num_msgs, numbers.Integral) != True:
+            if isinstance(num_msgs, int) != True:
+                num_msgs = int(num_msgs) + 1
+            fragment = 0
+            # Create the output fragments list of messages
+            for _ in range(0, num_msgs, 1):
+                text_out.append(text_in[fragment:fragment+CONST['TLG_MSG_MAX_CHARS']])
+                #text_out.append(text_in[fragment:fragment+CONST['TLG_MSG_MAX_CHARS']].decode('utf-8', \
+                #        'ignore'))
+                fragment = fragment + CONST['TLG_MSG_MAX_CHARS']
+        # Return the result text/list-of-fragments
+        return text_out
+
+
+    def read_feeds(self):
+        '''Read chat feeds from json file content'''
         fjson_chat_feeds = TSjson.TSjson('{}/{}.json'.format(CONST['CHATS_DIR'], self.chat_id))
-        feeds = fjson_chat_feeds.read_content()
-        feeds = feeds[0]['Feeds']
-        # For each feed url
-        for feed in feeds:
+        chat_feeds = fjson_chat_feeds.read_content()
+        return chat_feeds[0]['Feeds']
+
+
+    def parse_feeds(self, feeds):
+        '''Parse all feeds and determine all feed and entries data'''
+        actual_feeds = []
+        # For each feed
+        for i, feed in enumerate(feeds):
             # Parse and get feed data
-            url = feed['URL']
-            feedparse = parse(url)
-            actual_feeds['Title'] = feedparse['feed']['title']
-            #actual_feeds['Subtitle'] = feedparse['feed']['subtitle']
-            actual_feeds['Link'] = feedparse['feed']['link']
+            feedparse = parse(feed['URL'])
+            feed_to_add = {'Title': '', 'Link' : '', 'Entries' : []}
+            feed_to_add['Title'] = feedparse['feed']['title']
+            feed_to_add['Link'] = feedparse['feed']['link']
             # Determine number of entries to show
-            #for i in range(0, len(feedparse['entries']), 1):
             if len(feedparse['entries']) >= CONST['NUM_SHOW_ENTRIES']:
                 entries_to_show = CONST['NUM_SHOW_ENTRIES']
             else:
                 entries_to_show = len(feedparse['entries'])
-            # If any entry
+            # If there is any entry
             if entries_to_show:
                 # For entries to show, get entry data
                 for i in range(entries_to_show-1, -1, -1):
@@ -93,98 +121,88 @@ class CchatFeed(Thread):
                     if len(entry['Summary']) > CONST['MAX_ENTRY_SUMMARY']:
                         entry['Summary'] = entry['Summary'][0:CONST['MAX_ENTRY_SUMMARY']]
                         entry['Summary'] = '{}...'.format(entry['Summary'])
-                    # Add feed entry data to actual feeds variable
-                    actual_feeds['Entries'].append(entry)
-                # Send the telegram message/s
-                last_entry = actual_feeds['Entries'][entries_to_show-1]
-                bot_msg = 'Feed:\n{}{}Link:\n{}{}\nLast entry:\n\n{}\n{}\n\n{}\n\n{}'.format( \
-                        actual_feeds['Title'], TEXT['LINE'], actual_feeds['Link'], TEXT['LINE'], \
-                        last_entry['Title'], last_entry['Published'], last_entry['Summary'], \
-                        last_entry['Link'])
-                bot_msg = split_tlg_msgs(bot_msg)
-                for msg in bot_msg:
-                    self.bot.sendMessage(chat_id=self.chat_id, text=msg)
-            else:
-                bot_msg = 'Feed:\n{}{}Link:\n{}{}\n{}'.format(actual_feeds['Title'], TEXT['LINE'], \
-                        actual_feeds['Link'], TEXT['LINE'], TEXT['NO_ENTRIES'])
-                self.bot.sendMessage(chat_id=self.chat_id, text=bot_msg)
-            # Add all feed data to last feeds variable
-            last_feeds = actual_feeds.copy()
-        # While not end the thread (finish() method call from /disable command)
-        while not self.end:
-            # Read the actual feeds urls of chat file (by chat_id), searching for changes
-            actual_feeds = {'Title': '', 'Subtitle' : '', 'Link' : '', 'Entries' : []}
-            feeds = fjson_chat_feeds.read_content()
-            feeds = feeds[0]['Feeds']
-            # For each feed url
+                    # Add feed entry data to feed variable
+                    feed_to_add['Entries'].append(entry)
+            # Add feed data to actual feeds variable
+            actual_feeds.append(feed_to_add)
+        return actual_feeds
+
+
+    def get_entries(self, feeds):
+        '''Extract in a single list all entries title of feeds element'''
+        all_entries = []
+        for feed in feeds:
+            for entries in feed['Entries']:
+                all_entries.append(entries)
+        return all_entries
+
+
+    def bot_send_feeds_init(self, feeds):
+        '''Send telegram messages with initial feeds info (all feeds last entry)'''
+        # If any feed, for each feed in feeds, if any entry in feed
+        if feeds:
             for feed in feeds:
-                # Parse and get feed data and entries data
-                url = feed['URL']
-                feedparse = parse(url)
-                actual_feeds['Title'] = feedparse['feed']['title']
-                # Determine number of entries to show
-                #for i in range(0, len(feedparse['entries']), 1):
-                if len(feedparse['entries']) >= CONST['NUM_SHOW_ENTRIES']:
-                    entries_to_show = CONST['NUM_SHOW_ENTRIES']
+                if feed['Entries']:
+                    # Get the last entry and prepare the bot response message
+                    last_entry = feed['Entries'][len(feed['Entries']) - 1]
+                    bot_msg = 'Feed:\n{}{}Link:\n{}{}\nLast entry:\n\n{}\n{}\n\n{}\n\n{}'.format( \
+                            feed['Title'], TEXT['LINE'], feed['Link'], TEXT['LINE'], \
+                            last_entry['Title'], last_entry['Published'], last_entry['Summary'], \
+                            last_entry['Link'])
+                    # Split the message if it is higher than the TLG message legth limit and send it
+                    bot_msg = self.split_tlg_msgs(bot_msg)
+                    for msg in bot_msg:
+                        self.bot.sendMessage(chat_id=self.chat_id, text=msg)
                 else:
-                    entries_to_show = len(feedparse['entries'])
-                # If any entry (not 0)
-                if entries_to_show:
-                    # For entries to show, get entry data
-                    for i in range(entries_to_show-1, -1, -1):
-                        entry = {'Title': '', 'Published' : '', 'Summary' : '', 'Link' : ''}
-                        entry['Title'] = feedparse['entries'][i]['title']
-                        entry['Published'] = feedparse['entries'][i]['published']
-                        entry['Summary'] = feedparse['entries'][i]['summary']
-                        entry['Link'] = feedparse['entries'][i]['link']
-                        # Truncate entry summary if it is more than MAX_ENTRY_SUMMARY chars
-                        if len(entry['Summary']) > CONST['MAX_ENTRY_SUMMARY']:
-                            entry['Summary'] = entry['Summary'][0:CONST['MAX_ENTRY_SUMMARY']]
-                            entry['Summary'] = '{}...'.format(entry['Summary'])
-                        # Add feed entry data to actual feeds variable
-                        actual_feeds['Entries'].append(entry)
-                        # If it is a new entry
-                        if entry not in last_feeds['Entries']:
+                    # Send a message to tell that this feed does not have any entry
+                    bot_msg = 'Feed:\n{}{}Link:\n{}{}\n{}'.format(feed['Title'], TEXT['LINE'], \
+                                feed['Link'], TEXT['LINE'], TEXT['NO_ENTRIES'])
+                    self.bot.sendMessage(chat_id=self.chat_id, text=bot_msg)
+
+
+    def bot_send_feeds_changes(self, actual_feeds, last_entries):
+        '''Checks and send telegram feeds message/s if any change was made in the feeds entries'''
+        if actual_feeds:
+            for feed in actual_feeds:
+                if feed['Entries']:
+                    for entry in feed['Entries']:
+                        if entry not in last_entries:
                             # Send the telegram message/s
-                            bot_msg = '{}{}{}\n{}\n\n{}\n\n{}' \
-                                    .format(actual_feeds['Title'], TEXT['LINE'], entry['Title'], \
-                                    entry['Published'], entry['Summary'], \
-                                    entry['Link'])
-                            bot_msg = split_tlg_msgs(bot_msg)
+                            bot_msg = '{}{}{}\n{}\n\n{}\n\n{}'.format(feed['Title'], \
+                                    TEXT['LINE'], entry['Title'], entry['Published'], \
+                                    entry['Summary'], entry['Link'])
+                            bot_msg = self.split_tlg_msgs(bot_msg)
                             for msg in bot_msg:
                                 self.bot.sendMessage(chat_id=self.chat_id, text=msg)
-            # Add all feed data to last feeds variable
-            last_feeds = actual_feeds.copy()
+
+
+    def run(self):
+        '''thread method that run when the thread is launched (thread.start() is call)'''
+        # Initial values of variables
+        last_entries = []
+        actual_entries = []
+        actual_feeds = [{'Title': '', 'Link' : '', 'Entries' : []}]
+        # Read chat feeds from json file content and determine actual feeds
+        feeds = self.read_feeds()
+        actual_feeds = self.parse_feeds(feeds)
+        # Send the telegram initial feeds message/s
+        self.bot_send_feeds_init(actual_feeds)
+        # Get all the last entries in a single list
+        last_entries = self.get_entries(actual_feeds[:])
+        # While not "end" the thread (finish() method call from /disable TLG command)
+        while not self.end:
+            # Read chat feeds from json file content and determine actual feeds
+            feeds = self.read_feeds()
+            actual_feeds = self.parse_feeds(feeds)
+            # Send the telegram feeds message/s if any change was made in the feeds entries
+            self.bot_send_feeds_changes(actual_feeds, last_entries)
+            # Update last entries
+            last_entries = self.get_entries(actual_feeds[:])
             sleep(CONST['T_USER_FEEDS'])
 
 ####################################################################################################
 
 ### Functions ###
-def split_tlg_msgs(text_in):
-    '''Function for split a text in fragments of telegram allowed length message'''
-    text_out = []
-    num_char = len(text_in)
-    # Just one fragment if the length of the message is less than max chars allowed per TLG message
-    if num_char <= CONST['TLG_MSG_MAX_CHARS']:
-        text_out.append(text_in)
-    # Split the text in fragments if the length is higher than max chars allowed by TLG message
-    else:
-        # Determine the number of msgs to send and add 1 more msg if it is not an integer number
-        num_msgs = num_char/float(CONST['TLG_MSG_MAX_CHARS'])
-        #if isinstance(num_msgs, numbers.Integral) != True:
-        if isinstance(num_msgs, int) != True:
-            num_msgs = int(num_msgs) + 1
-        fragment = 0
-        # Create the output fragments list of messages
-        for _ in range(0, num_msgs, 1):
-            text_out.append(text_in[fragment:fragment+CONST['TLG_MSG_MAX_CHARS']])
-            #text_out.append(text_in[fragment:fragment+CONST['TLG_MSG_MAX_CHARS']].decode('utf-8', \
-            #        'ignore'))
-            fragment = fragment + CONST['TLG_MSG_MAX_CHARS']
-    # Return the result text/list-of-fragments
-    return text_out
-
-
 def signup_user(update):
     '''Function for sign-up a user in the system (add to users list file)'''
     # Initial user data for users list file
@@ -383,10 +401,10 @@ def cmd_list(bot, update):
     if chat_feeds:
         chat_feeds = chat_feeds[0]
         # For each feed
-        for feed in chat_feeds:
-            feed_title = feed['Titles']
-            feed_url = feed['Feeds']
-            bot_msg = '{}\n{}\n{}\n\n'.format(bot_msg, feed_title, feed_url)
+        for feed in chat_feeds['Feeds']:
+            feed_title = feed['Title']
+            feed_url = feed['URL']
+            bot_msg = '{}\n{}\n{}\n'.format(bot_msg, feed_title, feed_url)
     update.message.reply_text(bot_msg) # Bot reply
 
 

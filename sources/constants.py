@@ -11,7 +11,7 @@ Creation date:
 Last modified date:
     31/08/2017
 Version:
-    0.7.0
+    0.8.0
 '''
 
 ####################################################################################################
@@ -20,7 +20,7 @@ Version:
 CONST = {
     'DEVELOPER' : '@JoseTLG', # Developer Telegram contact
     'DATE' : '31/08/2017', # Last modified date
-    'VERSION' : '0.7.0', # Actual version
+    'VERSION' : '0.8.0', # Actual version
     'TOKEN' : 'XXXXXXXXX:XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', # Bot Token (get it from @BotFather)
     'REG_KEY' : 'registrationKey1234', # User registration Key (for signup and let use the Bot)
     'CHATS_DIR' : './data/chats', # Path of chats data directory
@@ -112,7 +112,7 @@ TEXT = {
         'Feed successfull removed.',
 
     'NO_ENTRIES' : \
-        'There is no current entries in the feed:\n',
+        'There is no current entries in this feed.',
 
     'ENA_NOT_DISABLED' : \
         'I am already enabled.',
