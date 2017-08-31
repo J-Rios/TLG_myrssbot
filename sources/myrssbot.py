@@ -9,9 +9,9 @@ Author:
 Creation date:
     23/08/2017
 Last modified date:
-    30/08/2017
+    31/08/2017
 Version:
-    0.6.0
+    0.7.0
 '''
 
 ####################################################################################################
@@ -64,11 +64,12 @@ class CchatFeed(Thread):
         last_feeds = {'Title': '', 'Subtitle' : '', 'Link' : '', 'Entries' : []}
         actual_feeds = {'Title': '', 'Subtitle' : '', 'Link' : '', 'Entries' : []}
         fjson_chat_feeds = TSjson.TSjson('{}/{}.json'.format(CONST['CHATS_DIR'], self.chat_id))
-        feeds_urls = fjson_chat_feeds.read_content()
-        feeds_urls = feeds_urls[0]['Feeds']
+        feeds = fjson_chat_feeds.read_content()
+        feeds = feeds[0]['Feeds']
         # For each feed url
-        for url in feeds_urls:
+        for feed in feeds:
             # Parse and get feed data
+            url = feed['URL']
             feedparse = parse(url)
             actual_feeds['Title'] = feedparse['feed']['title']
             #actual_feeds['Subtitle'] = feedparse['feed']['subtitle']
@@ -103,17 +104,22 @@ class CchatFeed(Thread):
                 bot_msg = split_tlg_msgs(bot_msg)
                 for msg in bot_msg:
                     self.bot.sendMessage(chat_id=self.chat_id, text=msg)
+            else:
+                bot_msg = 'Feed:\n{}{}Link:\n{}{}\n{}'.format(actual_feeds['Title'], TEXT['LINE'], \
+                        actual_feeds['Link'], TEXT['LINE'], TEXT['NO_ENTRIES'])
+                self.bot.sendMessage(chat_id=self.chat_id, text=bot_msg)
             # Add all feed data to last feeds variable
             last_feeds = actual_feeds.copy()
         # While not end the thread (finish() method call from /disable command)
         while not self.end:
             # Read the actual feeds urls of chat file (by chat_id), searching for changes
             actual_feeds = {'Title': '', 'Subtitle' : '', 'Link' : '', 'Entries' : []}
-            feeds_urls = fjson_chat_feeds.read_content()
-            feeds_urls = feeds_urls[0]['Feeds']
+            feeds = fjson_chat_feeds.read_content()
+            feeds = feeds[0]['Feeds']
             # For each feed url
-            for url in feeds_urls:
+            for feed in feeds:
                 # Parse and get feed data and entries data
+                url = feed['URL']
                 feedparse = parse(url)
                 actual_feeds['Title'] = feedparse['feed']['title']
                 # Determine number of entries to show
@@ -223,24 +229,26 @@ def subscribed(chat_id, feed_url):
         if subs_feeds:
             subs_feeds = subs_feeds[0]
             for feed in subs_feeds['Feeds']:
-                if feed_url == feed:
+                if feed_url == feed['URL']:
                     _subscribed = True
                     break
     return _subscribed
 
 
-def any_subscription(user_id):
-    '''Function to know if there is any feed subscription'''
+def any_subscription(chat_id):
+    '''Function to know if there is any feed subscription in the chat'''
     # Read users list and determine if there any feed subscription
     any_sub = False
-    fjson_usr_list = TSjson.TSjson(CONST['USERS_LIST_FILE'])
-    usr_list = fjson_usr_list.read_content()
-    for usr in usr_list:
-        if usr['User_id'] == user_id:
-            if usr['Chats']:
+    chat_file = '{}/{}.json'.format(CONST['CHATS_DIR'], chat_id)
+    if path.exists(chat_file):
+        fjson_chat_feeds = TSjson.TSjson(chat_file)
+        subs_feeds = fjson_chat_feeds.read_content()
+        if subs_feeds:
+            subs_feeds = subs_feeds[0]
+            if subs_feeds['Feeds']:
                 any_sub = True
-                break
     return any_sub
+
 
 def is_not_active(chat_id):
     '''Function to know if a chat FeedReader thread is running'''
@@ -275,26 +283,39 @@ def add_feed(user_id, chat_id, feed_title, feed_url):
     # Read chat feeds file and add the new feed url to it
     fjson_chat_feeds = TSjson.TSjson('{}/{}.json'.format(CONST['CHATS_DIR'], chat_id))
     subs_feeds = fjson_chat_feeds.read_content()
+    # If there is any feed in the file
     if subs_feeds:
-        subs_feeds = subs_feeds[0]
-        subs_feeds['Feeds'].append(feed_url)
-        fjson_chat_feeds.update(subs_feeds, 'Chat_id')
+        feed = {}
+        feed['Title'] = feed_title
+        feed['URL'] = feed_url
+        if feed not in subs_feeds:
+            subs_feeds = subs_feeds[0]
+            subs_feeds['Feeds'].append(feed)
+            fjson_chat_feeds.update(subs_feeds, 'Chat_id')
+    # If there is no feeds in the file yet
     else:
+        feed = {}
+        feed['Title'] = feed_title
+        feed['URL'] = feed_url
         usr_feeds = OrderedDict([])
         usr_feeds['Chat_id'] = chat_id
-        usr_feeds['Title'] = feed_title
-        usr_feeds['Feeds'] = [feed_url]
+        usr_feeds['Feeds'] = [feed]
         fjson_chat_feeds.write_content(usr_feeds)
 
 
 def remove_feed(chat_id, feed_url):
     '''Function to remove (unsubscribe) a feed from the chat feeds file'''
+    # Get the feed title
+    feed = {}
+    feedpars = parse(feed_url)
+    feed['Title'] = feedpars['feed']['title']
+    feed['URL'] = feed_url
     # Create TSjson object for feeds of chat file and remove the feed
     fjson_chat_feeds = TSjson.TSjson('{}/{}.json'.format(CONST['CHATS_DIR'], chat_id))
     subs_feeds = fjson_chat_feeds.read_content()
     if subs_feeds:
         subs_feeds = subs_feeds[0]
-        subs_feeds['Feeds'].remove(feed_url)
+        subs_feeds['Feeds'].remove(feed)
         fjson_chat_feeds.update(subs_feeds, 'Chat_id')
 
 ####################################################################################################
@@ -363,7 +384,7 @@ def cmd_list(bot, update):
         chat_feeds = chat_feeds[0]
         # For each feed
         for feed in chat_feeds:
-            feed_title = feed['Title']
+            feed_title = feed['Titles']
             feed_url = feed['Feeds']
             bot_msg = '{}\n{}\n{}\n\n'.format(bot_msg, feed_title, feed_url)
     update.message.reply_text(bot_msg) # Bot reply
@@ -378,7 +399,7 @@ def cmd_add(bot, update, args):
         if user_is_signedup(user_id): # If the user is sign-up
             if len(args) == 1: # If 1 argument has been provided
                 feed_url = args[0] # Get the feed url provided (argument)
-                if not subscribed(chat_id, feed_url): # If user not already subscribed to that feed
+                if not subscribed(chat_id, feed_url): # If chat not already subscribed to that feed
                     feed = parse(feed_url) # Get the feedparse of that feed url
                     if feed['bozo'] == 0: # If valid feed
                         feed_title = feed['feed']['title'] # Get feed title
@@ -425,20 +446,23 @@ def cmd_enable(bot, update):
     global threads_lock # Use the global lock for active threads
     chat_id = update.message.chat_id # Get the chat id
     user_id = update.message.from_user.id # Get the user ID
-    if is_not_active(chat_id): # If the actual chat is not an active FeedReader thread
-        if any_subscription(user_id): # If there is any feed subscription
-            thr_feed = CchatFeed(args=(chat_id, bot)) # Create and launch actual chat feeds threads
-            #thr_feed.setDaemon(True) # Set the thread as daemon
-            threads_lock.acquire() # Lock the active threads variable
-            threads.append(thr_feed) # Add actual thread to the active threads variable
-            threads_lock.release() # Release the active threads variable lock
-            thr_feed.start() # Launch the thread
-            bot_response = TEXT['ENA_ENABLED'] # Bot response
-        else: # No feed subscription
-            bot_response = TEXT['ENA_NOT_SUBS'] # Bot response
-    else: # Actual chat FeedReader thread currently running
-        bot_response = TEXT['ENA_NOT_DISABLED'] # Bot response
-    update.message.reply_text(bot_response) # Bot reply
+    if user_is_signedup(user_id): # If the user is signed-up
+        if is_not_active(chat_id): # If the actual chat is not an active FeedReader thread
+            if any_subscription(chat_id): # If there is any feed subscription
+                thr_feed = CchatFeed(args=(chat_id, bot)) # Create and launch actual chat feeds threads
+                #thr_feed.setDaemon(True) # Set the thread as daemon
+                threads_lock.acquire() # Lock the active threads variable
+                threads.append(thr_feed) # Add actual thread to the active threads variable
+                threads_lock.release() # Release the active threads variable lock
+                thr_feed.start() # Launch the thread
+                bot_msg = TEXT['ENA_ENABLED'] # Bot response
+            else: # No feed subscription
+                bot_msg = TEXT['ENA_NOT_SUBS'] # Bot response
+        else: # Actual chat FeedReader thread currently running
+            bot_msg = TEXT['ENA_NOT_DISABLED'] # Bot response
+    else:
+        bot_msg = TEXT['CMD_NOT_ALLOW'] # Bot response
+    update.message.reply_text(bot_msg) # Bot reply
 
 
 def cmd_disable(bot, update):
@@ -446,16 +470,20 @@ def cmd_disable(bot, update):
     global threads # Use global variable for active threads
     global threads_lock # Use the global lock for active threads
     chat_id = update.message.chat_id # Get the chat id
-    bot_response = TEXT['DIS_NOT_ENABLED'] # Bot response
-    threads_lock.acquire() # Lock the active threads variable
-    for thr_feed in threads: # For each active thread
-        if thr_feed.isAlive(): # Make sure that the thread is really active
-            if chat_id == thr_feed.get_id(): # If the actual chat is in the active threads
-                thr_feed.finish() # Finish the thread
-                threads.remove(thr_feed) # Remove actual thread from the active threads variable
-                bot_response = TEXT['DIS_DISABLED'] # Bot response
-    threads_lock.release() # Release the active threads variable lock
-    update.message.reply_text(bot_response) # Bot reply
+    user_id = update.message.from_user.id # Get the user ID
+    if user_is_signedup(user_id): # If the user is signed-up
+        bot_msg = TEXT['DIS_NOT_ENABLED'] # Bot response
+        threads_lock.acquire() # Lock the active threads variable
+        for thr_feed in threads: # For each active thread
+            if thr_feed.isAlive(): # Make sure that the thread is really active
+                if chat_id == thr_feed.get_id(): # If the actual chat is in the active threads
+                    thr_feed.finish() # Finish the thread
+                    threads.remove(thr_feed) # Remove actual thread from the active threads variable
+                    bot_msg = TEXT['DIS_DISABLED'] # Bot response
+        threads_lock.release() # Release the active threads variable lock
+    else:
+        bot_msg = TEXT['CMD_NOT_ALLOW'] # Bot response
+    update.message.reply_text(bot_msg) # Bot reply
 
 ####################################################################################################
 

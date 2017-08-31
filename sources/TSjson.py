@@ -11,7 +11,7 @@ Creation date:
 Last modified date:
     25/08/2017
 Version:
-    1.1.0
+    1.2.0
 '''
 
 ####################################################################################################
@@ -97,25 +97,26 @@ class TSjson(object):
         try: # Intentar abrir el archivo
             self.lock.acquire() # Cerramos (adquirimos) el mutex
             
-            if os.path.exists(self.file_name) and os.stat(self.file_name).st_size: # Si el archivo existe y no esta vacio
-                with open(self.file_name, "r") as f: # Abrir el archivo en modo lectura
-                    content = json.load(f, object_pairs_hook=OrderedDict) # Leer todo el archivo y devolver la lectura de los datos json usando un diccionario ordenado
+            if data: # Si el dato no esta vacio
+                if os.path.exists(self.file_name) and os.stat(self.file_name).st_size: # Si el archivo existe y no esta vacio
+                    with open(self.file_name, "r") as f: # Abrir el archivo en modo lectura
+                        content = json.load(f, object_pairs_hook=OrderedDict) # Leer todo el archivo y devolver la lectura de los datos json usando un diccionario ordenado
 
-                content['Content'].append(data) # Añadir los nuevos datos al contenido del json
-                
-                with open(self.file_name, "w") as f: # Abrir el archivo en modo escritura (sobre-escribe)
-                    f.write("\n{}\n".format(json.dumps(content, indent=4))) # Escribimos en el archivo los datos json asegurando todos los caracteres ascii, codificacion utf-8 y una "indentacion" de 4 espacios
-            else: # El archivo no existe o esta vacio
-                with open(self.file_name, "w") as f: # Abrir el archivo en modo escritura (sobre-escribe)
-                    f.write('\n{\n    "Content": []\n}\n') # Escribir la estructura de contenido basica
-                
-                with open(self.file_name, "r") as f: # Abrir el archivo en modo lectura
-                    content = json.load(f) # Leer todo el archivo
+                    content['Content'].append(data) # Añadir los nuevos datos al contenido del json
+                    
+                    with open(self.file_name, "w") as f: # Abrir el archivo en modo escritura (sobre-escribe)
+                        f.write("\n{}\n".format(json.dumps(content, indent=4))) # Escribimos en el archivo los datos json asegurando todos los caracteres ascii, codificacion utf-8 y una "indentacion" de 4 espacios
+                else: # El archivo no existe o esta vacio
+                    with open(self.file_name, "w") as f: # Abrir el archivo en modo escritura (sobre-escribe)
+                        f.write('\n{\n    "Content": []\n}\n') # Escribir la estructura de contenido basica
+                    
+                    with open(self.file_name, "r") as f: # Abrir el archivo en modo lectura
+                        content = json.load(f) # Leer todo el archivo
 
-                content['Content'].append(data) # Añadir los datos al contenido del json
+                    content['Content'].append(data) # Añadir los datos al contenido del json
 
-                with open(self.file_name, "w") as f:  # Abrir el archivo en modo escritura (sobre-escribe)
-                    f.write("\n{}\n".format(json.dumps(content, indent=4))) # Escribimos en el archivo los datos json asegurando todos los caracteres ascii, codificacion utf-8 y una "indentacion" de 4 espacios
+                    with open(self.file_name, "w") as f:  # Abrir el archivo en modo escritura (sobre-escribe)
+                        f.write("\n{}\n".format(json.dumps(content, indent=4))) # Escribimos en el archivo los datos json asegurando todos los caracteres ascii, codificacion utf-8 y una "indentacion" de 4 espacios
         except IOError as e:
             print("    I/O error({0}): {1}".format(e.errno, e.strerror))
         except ValueError:
@@ -156,17 +157,13 @@ class TSjson(object):
         [Nota: Cada dato json necesita al menos 1 elemento identificador unico (uide), si no es asi, la eliminacion se producira en el primer dato con dicho elemento uide que se encuentre]
         '''
         file_content = self.read_content() # Leer el contenido del archivo json
-        pos = -1 # Posicion inicial del dato dentro del contenido (-1, no encontrado)
-        i = 0 # Indice inicial de dato contenido
         for data in file_content: # Para cada dato json contenido
             if data[uide] == element_value: # Si el dato coincide con el buscado
-                pos = i # Dato encontrado en la posicion i
+                file_content.remove(data) # Eliminamos el dato
                 break # Interrumpir y salir del bucle
-            else: # El dato no coincide con el buscado
-                i = i + 1 # Incrementamos el indice
-        del file_content[pos] # Remove the item from that obtained position
-        self.clear_content() # Clear content of file
-        self.write_content(file_content) # Write the modified content (without the item)
+        self.clear_content() # Eliminamos el contenido del archivo
+        if file_content: # Si hay algun dato en el contenido modificado
+            self.write_content(file_content[0]) # Write the modified content (without the item)
 
 
     def search_by_uide(self, element_value, uide):
@@ -179,10 +176,11 @@ class TSjson(object):
         result['data'] = None # Dato encontrado inicialmente con ningun valor
         file_data = self.read() # Leer todo el archivo json
         for element in file_data['Content']: # Para cada elemento en el archivo json
-            if element_value == element[uide]: # Si el dato json tiene el UIDE buscado
-                result['found'] = True # Marcar que se ha encontrado la posicion
-                result['data'] = element # Obtenemos el dato encontrado
-                break # Interrumpir y salir del bucle
+            if element: # Si el contenido no esta vacio
+                if element_value == element[uide]: # Si el dato json tiene el UIDE buscado
+                    result['found'] = True # Marcar que se ha encontrado la posicion
+                    result['data'] = element # Obtenemos el dato encontrado
+                    break # Interrumpir y salir del bucle
         return result # Devolver si se ha encontrado o no y el dato encontrado
 
 
