@@ -9,9 +9,9 @@ Author:
 Creation date:
     23/08/2017
 Last modified date:
-    31/08/2017
+    01/09/2017
 Version:
-    0.8.0
+    0.8.1
 '''
 
 ####################################################################################################
@@ -22,6 +22,7 @@ from time import sleep
 from threading import Thread, Lock
 from collections import OrderedDict
 from feedparser import parse
+from bs4 import BeautifulSoup
 from telegram import MessageEntity, ParseMode, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, RegexHandler, \
                          ConversationHandler, CallbackQueryHandler
@@ -65,22 +66,19 @@ class CchatFeed(Thread):
         '''Function for split a text in fragments of telegram allowed length message'''
         text_out = []
         num_char = len(text_in)
-        # Just one fragment if the length of the message is less than max chars allowed per TLG message
+        # Just one fragment if the length of the msg is less than max chars allowed per TLG message
         if num_char <= CONST['TLG_MSG_MAX_CHARS']:
             text_out.append(text_in)
         # Split the text in fragments if the length is higher than max chars allowed by TLG message
         else:
             # Determine the number of msgs to send and add 1 more msg if it is not an integer number
             num_msgs = num_char/float(CONST['TLG_MSG_MAX_CHARS'])
-            #if isinstance(num_msgs, numbers.Integral) != True:
             if isinstance(num_msgs, int) != True:
                 num_msgs = int(num_msgs) + 1
             fragment = 0
             # Create the output fragments list of messages
             for _ in range(0, num_msgs, 1):
                 text_out.append(text_in[fragment:fragment+CONST['TLG_MSG_MAX_CHARS']])
-                #text_out.append(text_in[fragment:fragment+CONST['TLG_MSG_MAX_CHARS']].decode('utf-8', \
-                #        'ignore'))
                 fragment = fragment + CONST['TLG_MSG_MAX_CHARS']
         # Return the result text/list-of-fragments
         return text_out
@@ -97,7 +95,7 @@ class CchatFeed(Thread):
         '''Parse all feeds and determine all feed and entries data'''
         actual_feeds = []
         # For each feed
-        for i, feed in enumerate(feeds):
+        for feed in feeds:
             # Parse and get feed data
             feedparse = parse(feed['URL'])
             feed_to_add = {'Title': '', 'Link' : '', 'Entries' : []}
@@ -117,6 +115,10 @@ class CchatFeed(Thread):
                     entry['Published'] = feedparse['entries'][i]['published']
                     entry['Summary'] = feedparse['entries'][i]['summary']
                     entry['Link'] = feedparse['entries'][i]['link']
+                    # Extract just paragraphs from the html summary
+                    soup = BeautifulSoup(entry['Summary'], "html.parser")
+                    text = soup.get_text()
+                    entry['Summary'] = bytes(text, "unicode_escape").decode("unicode_escape")
                     # Truncate entry summary if it is more than MAX_ENTRY_SUMMARY chars
                     if len(entry['Summary']) > CONST['MAX_ENTRY_SUMMARY']:
                         entry['Summary'] = entry['Summary'][0:CONST['MAX_ENTRY_SUMMARY']]
@@ -158,6 +160,8 @@ class CchatFeed(Thread):
                     bot_msg = 'Feed:\n{}{}Link:\n{}{}\n{}'.format(feed['Title'], TEXT['LINE'], \
                                 feed['Link'], TEXT['LINE'], TEXT['NO_ENTRIES'])
                     self.bot.sendMessage(chat_id=self.chat_id, text=bot_msg)
+                # Delay between messages
+                sleep(0.8)
 
 
     def bot_send_feeds_changes(self, actual_feeds, last_entries):
@@ -174,13 +178,14 @@ class CchatFeed(Thread):
                             bot_msg = self.split_tlg_msgs(bot_msg)
                             for msg in bot_msg:
                                 self.bot.sendMessage(chat_id=self.chat_id, text=msg)
+                            # Delay between messages
+                            sleep(0.8)
 
 
     def run(self):
         '''thread method that run when the thread is launched (thread.start() is call)'''
         # Initial values of variables
         last_entries = []
-        actual_entries = []
         actual_feeds = [{'Title': '', 'Link' : '', 'Entries' : []}]
         # Read chat feeds from json file content and determine actual feeds
         feeds = self.read_feeds()

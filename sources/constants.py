@@ -9,9 +9,9 @@ Author:
 Creation date:
     23/08/2017
 Last modified date:
-    31/08/2017
+    01/09/2017
 Version:
-    0.8.0
+    0.8.1
 '''
 
 ####################################################################################################
@@ -19,14 +19,14 @@ Version:
 ### Constants ###
 CONST = {
     'DEVELOPER' : '@JoseTLG', # Developer Telegram contact
-    'DATE' : '31/08/2017', # Last modified date
-    'VERSION' : '0.8.0', # Actual version
+    'DATE' : '01/09/2017', # Last modified date
+    'VERSION' : '0.8.1', # Actual version
     'TOKEN' : 'XXXXXXXXX:XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', # Bot Token (get it from @BotFather)
     'REG_KEY' : 'registrationKey1234', # User registration Key (for signup and let use the Bot)
     'CHATS_DIR' : './data/chats', # Path of chats data directory
     'USERS_LIST_FILE' : './data/users_list.json', # Json file of signed-up users list
     'TLG_MSG_MAX_CHARS' : 4095, # Max number of characters per message allowed by Telegram
-    'MAX_ENTRY_SUMMARY' : 500, # Max number of characters in entry summary (description)
+    'MAX_ENTRY_SUMMARY' : 1000, # Max number of characters in entry summary (description)
     'NUM_SHOW_ENTRIES' : 5, # Number of max entries to monitorize and show
     'T_USER_FEEDS' : 10 # User time between feeds check (600s -> 10m)
 }
