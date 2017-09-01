@@ -11,7 +11,7 @@ Creation date:
 Last modified date:
     01/09/2017
 Version:
-    0.8.1
+    0.9.0
 '''
 
 ####################################################################################################
@@ -22,11 +22,11 @@ from time import sleep
 from threading import Thread, Lock
 from collections import OrderedDict
 from feedparser import parse
-from bs4 import BeautifulSoup
 from telegram import MessageEntity, ParseMode, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, RegexHandler, \
                          ConversationHandler, CallbackQueryHandler
 
+import re
 import TSjson
 from constants import CONST, TEXT
 
@@ -84,6 +84,40 @@ class CchatFeed(Thread):
         return text_out
 
 
+    def html_fix_tlg(self, summary):
+        '''Remove all anoying HTML tags from entries summary'''
+        # Put the input into output
+        output = summary
+        # Remove every HTML tag
+        for tag in CONST['HTML_ANOYING_TAGS']:
+            if tag == '<br>' or tag == '<br />':
+                output = output.replace(tag, '\n')
+            else:
+                output = output.replace(tag, '')
+        # Remove every HTML more complex structures
+        pattern = re.compile("<img(.*?)>")
+        result = pattern.search(output)
+        if result:
+            to_del = "<img{}>".format(result.group(1))
+            output = output.replace(to_del, '')
+        pattern = re.compile("<img(.*?)/>")
+        result = pattern.search(output)
+        if result:
+            to_del = "<img{}/>".format(result.group(1))
+            output = output.replace(to_del, '')
+        pattern = re.compile("<div(.*?)>")
+        result = pattern.search(output)
+        if result:
+            to_del = "<div{}>".format(result.group(1))
+            output = output.replace(to_del, '')
+        pattern = re.compile("<div(.*?)/>")
+        result = pattern.search(output)
+        if result:
+            to_del = "<div{}/>".format(result.group(1))
+            output = output.replace(to_del, '')
+        return output
+
+
     def read_feeds(self):
         '''Read chat feeds from json file content'''
         fjson_chat_feeds = TSjson.TSjson('{}/{}.json'.format(CONST['CHATS_DIR'], self.chat_id))
@@ -115,10 +149,8 @@ class CchatFeed(Thread):
                     entry['Published'] = feedparse['entries'][i]['published']
                     entry['Summary'] = feedparse['entries'][i]['summary']
                     entry['Link'] = feedparse['entries'][i]['link']
-                    # Extract just paragraphs from the html summary
-                    soup = BeautifulSoup(entry['Summary'], "html.parser")
-                    text = soup.get_text()
-                    entry['Summary'] = bytes(text, "unicode_escape").decode("unicode_escape")
+                    # Fix summary text to be allowed by telegram
+                    entry['Summary'] = self.html_fix_tlg(entry['Summary'])
                     # Truncate entry summary if it is more than MAX_ENTRY_SUMMARY chars
                     if len(entry['Summary']) > CONST['MAX_ENTRY_SUMMARY']:
                         entry['Summary'] = entry['Summary'][0:CONST['MAX_ENTRY_SUMMARY']]
@@ -147,19 +179,30 @@ class CchatFeed(Thread):
                 if feed['Entries']:
                     # Get the last entry and prepare the bot response message
                     last_entry = feed['Entries'][len(feed['Entries']) - 1]
-                    bot_msg = 'Feed:\n{}{}Link:\n{}{}\nLast entry:\n\n{}\n{}\n\n{}\n\n{}'.format( \
-                            feed['Title'], TEXT['LINE'], feed['Link'], TEXT['LINE'], \
-                            last_entry['Title'], last_entry['Published'], last_entry['Summary'], \
-                            last_entry['Link'])
+                    feed_titl = '<a href="{}">{}</a>'.format(feed['Link'], feed['Title'])
+                    entry_titl = '<a href="{}">{}</a>'.format(last_entry['Link'], \
+                            last_entry['Title'])
+                    bot_msg = '<b>Feed:</b>\n{}{}<b>Last entry:</b>\n\n{}\n{}\n\n{}'.format( \
+                            feed_titl, TEXT['LINE'], entry_titl, last_entry['Published'], \
+                            last_entry['Summary'])
                     # Split the message if it is higher than the TLG message legth limit and send it
                     bot_msg = self.split_tlg_msgs(bot_msg)
                     for msg in bot_msg:
-                        self.bot.sendMessage(chat_id=self.chat_id, text=msg)
+                        try:
+                            self.bot.send_message(chat_id=self.chat_id, text=msg, \
+                                    parse_mode=ParseMode.HTML)
+                        except Exception as error:
+                            print('Bot msg to send parse html error:\n{}\n'.format(error))
                 else:
                     # Send a message to tell that this feed does not have any entry
-                    bot_msg = 'Feed:\n{}{}Link:\n{}{}\n{}'.format(feed['Title'], TEXT['LINE'], \
-                                feed['Link'], TEXT['LINE'], TEXT['NO_ENTRIES'])
-                    self.bot.sendMessage(chat_id=self.chat_id, text=bot_msg)
+                    feed_titl = '<a href="{}">{}</a>'.format(feed['Link'], feed['Title'])
+                    bot_msg = '<b>Feed:</b>\n{}{}\n{}'.format(feed_titl, TEXT['LINE'], \
+                            TEXT['NO_ENTRIES'])
+                    try:
+                        self.bot.send_message(chat_id=self.chat_id, text=bot_msg, \
+                                parse_mode=ParseMode.HTML)
+                    except Exception as error:
+                        print('Bot msg to send parse html error:\n{}\n'.format(error))
                 # Delay between messages
                 sleep(0.8)
 
@@ -169,17 +212,24 @@ class CchatFeed(Thread):
         if actual_feeds:
             for feed in actual_feeds:
                 if feed['Entries']:
+                    num_sent = 0
                     for entry in feed['Entries']:
                         if entry not in last_entries:
                             # Send the telegram message/s
-                            bot_msg = '{}{}{}\n{}\n\n{}\n\n{}'.format(feed['Title'], \
-                                    TEXT['LINE'], entry['Title'], entry['Published'], \
-                                    entry['Summary'], entry['Link'])
+                            feed_titl = '<a href="{}">{}</a>'.format(feed['Link'], feed['Title'])
+                            entry_titl = '<a href="{}">{}</a>'.format(entry['Link'], entry['Title'])
+                            bot_msg = '{}{}{}\n{}\n\n{}'.format(feed_titl, TEXT['LINE'], \
+                                    entry_titl, entry['Published'], entry['Summary'])
                             bot_msg = self.split_tlg_msgs(bot_msg)
                             for msg in bot_msg:
-                                self.bot.sendMessage(chat_id=self.chat_id, text=msg)
-                            # Delay between messages
-                            sleep(0.8)
+                                try:
+                                    self.bot.send_message(chat_id=self.chat_id, text=msg, \
+                                            parse_mode=ParseMode.HTML)
+                                    num_sent = num_sent + 1
+                                except Exception as error:
+                                    print('Bot msg to send parse html error:\n{}\n'.format(error))
+                            if num_sent % 5:
+                                sleep(1)
 
 
     def run(self):

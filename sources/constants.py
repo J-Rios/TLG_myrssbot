@@ -11,7 +11,7 @@ Creation date:
 Last modified date:
     01/09/2017
 Version:
-    0.8.1
+    0.9.0
 '''
 
 ####################################################################################################
@@ -20,7 +20,7 @@ Version:
 CONST = {
     'DEVELOPER' : '@JoseTLG', # Developer Telegram contact
     'DATE' : '01/09/2017', # Last modified date
-    'VERSION' : '0.8.1', # Actual version
+    'VERSION' : '0.9.0', # Actual version
     'TOKEN' : 'XXXXXXXXX:XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', # Bot Token (get it from @BotFather)
     'REG_KEY' : 'registrationKey1234', # User registration Key (for signup and let use the Bot)
     'CHATS_DIR' : './data/chats', # Path of chats data directory
@@ -28,7 +28,12 @@ CONST = {
     'TLG_MSG_MAX_CHARS' : 4095, # Max number of characters per message allowed by Telegram
     'MAX_ENTRY_SUMMARY' : 1000, # Max number of characters in entry summary (description)
     'NUM_SHOW_ENTRIES' : 5, # Number of max entries to monitorize and show
-    'T_USER_FEEDS' : 10 # User time between feeds check (600s -> 10m)
+    'T_USER_FEEDS' : 10, # User time between feeds check (600s -> 10m)
+    'HTML_ANOYING_TAGS' : [ # HTML tags to remove from entries summary
+        '<p>', '</p>', '<br>', '<br/>', '<br />', '</br>', '<pre>', '</pre>', '<div>', '</div>', \
+        '<blockquote>', '</blockquote>', '<code>', '</code>', '<img>', '</img>', '<li>', '</li>', \
+        '<ul>', '</ul>', '<h1>', '</h1>', '<h2>', '</h2>', '<h3>', '</h3>'  \
+    ]
 }
 
 TEXT = {
