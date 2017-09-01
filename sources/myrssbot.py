@@ -11,12 +11,13 @@ Creation date:
 Last modified date:
     01/09/2017
 Version:
-    0.9.0
+    1.0.0
 '''
 
 ####################################################################################################
 
 ### Imported modules ###
+import re
 from os import path
 from time import sleep
 from threading import Thread, Lock
@@ -26,7 +27,6 @@ from telegram import MessageEntity, ParseMode, InlineKeyboardButton, InlineKeybo
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, RegexHandler, \
                          ConversationHandler, CallbackQueryHandler
 
-import re
 import TSjson
 from constants import CONST, TEXT
 
@@ -34,7 +34,9 @@ from constants import CONST, TEXT
 
 ### Globals ###
 threads = []
+lang = 'en'
 threads_lock = Lock()
+lang_lock = Lock()
 
 ####################################################################################################
 
@@ -45,7 +47,8 @@ class CchatFeed(Thread):
         ''' Class constructor'''
         Thread.__init__(self)
         self.chat_id = args[0]
-        self.bot = args[1]
+        self.lang = args[1]
+        self.bot = args[2]
         self.end = False
         self.lock = Lock()
 
@@ -183,8 +186,8 @@ class CchatFeed(Thread):
                     entry_titl = '<a href="{}">{}</a>'.format(last_entry['Link'], \
                             last_entry['Title'])
                     bot_msg = '<b>Feed:</b>\n{}{}<b>Last entry:</b>\n\n{}\n{}\n\n{}'.format( \
-                            feed_titl, TEXT['LINE'], entry_titl, last_entry['Published'], \
-                            last_entry['Summary'])
+                            feed_titl, TEXT[self.lang]['LINE'], entry_titl, \
+                            last_entry['Published'], last_entry['Summary'])
                     # Split the message if it is higher than the TLG message legth limit and send it
                     bot_msg = self.split_tlg_msgs(bot_msg)
                     for msg in bot_msg:
@@ -196,8 +199,8 @@ class CchatFeed(Thread):
                 else:
                     # Send a message to tell that this feed does not have any entry
                     feed_titl = '<a href="{}">{}</a>'.format(feed['Link'], feed['Title'])
-                    bot_msg = '<b>Feed:</b>\n{}{}\n{}'.format(feed_titl, TEXT['LINE'], \
-                            TEXT['NO_ENTRIES'])
+                    bot_msg = '<b>Feed:</b>\n{}{}\n{}'.format(feed_titl, TEXT[self.lang]['LINE'], \
+                            TEXT[self.lang]['NO_ENTRIES'])
                     try:
                         self.bot.send_message(chat_id=self.chat_id, text=bot_msg, \
                                 parse_mode=ParseMode.HTML)
@@ -218,8 +221,9 @@ class CchatFeed(Thread):
                             # Send the telegram message/s
                             feed_titl = '<a href="{}">{}</a>'.format(feed['Link'], feed['Title'])
                             entry_titl = '<a href="{}">{}</a>'.format(entry['Link'], entry['Title'])
-                            bot_msg = '{}{}{}\n{}\n\n{}'.format(feed_titl, TEXT['LINE'], \
-                                    entry_titl, entry['Published'], entry['Summary'])
+                            bot_msg = '{}{}{}\n{}\n\n{}'.format(feed_titl, \
+                                    TEXT[self.lang]['LINE'], entry_titl, entry['Published'], \
+                                    entry['Summary'])
                             bot_msg = self.split_tlg_msgs(bot_msg)
                             for msg in bot_msg:
                                 try:
@@ -258,6 +262,21 @@ class CchatFeed(Thread):
 ####################################################################################################
 
 ### Functions ###
+def change_lang(lang_provided):
+    '''Function for change the language'''
+    global lang
+    global lang_lock
+    changed = False
+    # Lock the lang variable and try to change it
+    lang_lock.acquire()
+    if lang_provided != lang:
+        lang = lang_provided
+        changed = True
+    # Release the lang variable and return if it was changed
+    lang_lock.release()
+    return changed
+
+
 def signup_user(update):
     '''Function for sign-up a user in the system (add to users list file)'''
     # Initial user data for users list file
@@ -266,7 +285,7 @@ def signup_user(update):
     usr_data['Name'] = update.message.from_user.name
     usr_data['User_id'] = update.message.from_user.id
     usr_data['Sign_date'] = (update.message.date).now().strftime('%Y-%m-%d %H:%M:%S')
-    usr_data['Chats'] = []
+    usr_data['Chats'] = [] # For future uses
     # Create TSjson object for list of users and write on them the data
     fjson_usr_list = TSjson.TSjson(CONST['USERS_LIST_FILE'])
     fjson_usr_list.write_content(usr_data)
@@ -396,12 +415,37 @@ def remove_feed(chat_id, feed_url):
 ### Received commands handlers ###
 def cmd_start(bot, update):
     '''/start command handler'''
-    update.message.reply_text(TEXT['START']) # Bot reply
+    update.message.reply_text(TEXT[lang]['START']) # Bot reply
 
 
 def cmd_help(bot, update):
     '''/help command handler'''
-    update.message.reply_text(TEXT['HELP']) # Bot reply
+    update.message.reply_text(TEXT[lang]['HELP']) # Bot reply
+
+
+def cmd_commands(bot, update):
+    '''/commands command handler'''
+    update.message.reply_text(TEXT[lang]['COMMANDS']) # Bot reply
+
+
+def cmd_language(bot, update, args):
+    '''/languaje command handler'''
+    if len(args) == 1: # If 1 argument has been provided
+        if user_is_signedup(update.message.from_user.id): # If the user is signed-up
+            lang_provided = args[0] # Get the language provided (argument)
+            if lang_provided == 'en' or lang_provided == 'es': # If language provided is valid
+                changed = change_lang(lang_provided) # Change language
+                if changed: # Language changed
+                    bot_msg = TEXT[lang]['LANG_CHANGE'] # Bot response
+                else: # Currently that language is set
+                    bot_msg = TEXT[lang]['LANG_SAME'] # Bot response
+            else: # Wrong Key provided
+                bot_msg = TEXT[lang]['LANG_BAD_LANG'] # Bot response
+        else: # The user is not signed-up
+            bot_msg = TEXT[lang]['CMD_NOT_ALLOW'] # Bot response
+    else: # No argument or more than 1 argument provided
+        bot_msg = TEXT[lang]['LANG_NOT_ARG'] # Bot response
+    update.message.reply_text(bot_msg) # Bot reply
 
 
 def cmd_signup(bot, update, args):
@@ -413,15 +457,15 @@ def cmd_signup(bot, update, args):
                 key_provided = args[0] # Get the key provided (argument)
                 if key_provided == CONST['REG_KEY']: # If Key provided is the correct and actual one
                     signup_user(update) # Sign-up the user (add-to/create json file)
-                    bot_msg = TEXT['SIGNUP_SUCCESS'] # Bot response
+                    bot_msg = TEXT[lang]['SIGNUP_SUCCESS'] # Bot response
                 else: # Wrong Key provided
-                    bot_msg = TEXT['SIGNUP_FAIL'] # Bot response
+                    bot_msg = TEXT[lang]['SIGNUP_FAIL'] # Bot response
             else: # The user is alredy signed-up
-                bot_msg = TEXT['SIGNUP_EXIST_USER'] # Bot response
+                bot_msg = TEXT[lang]['SIGNUP_EXIST_USER'] # Bot response
         else: # No argument or more than 1 argument provided
-            bot_msg = TEXT['SIGNUP_NOT_ARG'] # Bot response
+            bot_msg = TEXT[lang]['SIGNUP_NOT_ARG'] # Bot response
     else: # The FeedReader thread of this chat is running
-        bot_msg = TEXT['FEEDREADER_ACTIVE'] # Bot response
+        bot_msg = TEXT[lang]['FEEDREADER_ACTIVE'] # Bot response
     update.message.reply_text(bot_msg) # Bot reply
 
 
@@ -435,21 +479,21 @@ def cmd_signdown(bot, update, args):
                 confirmation_provided = args[0] # Get the confirmation provided (argument)
                 if confirmation_provided == 'iamsuretoremovemyaccount': # If arg provided is correct
                     signdown_user(user_id) # Sign-down the user
-                    bot_msg = TEXT['SIGNDOWN_SUCCESS'] # Bot response
+                    bot_msg = TEXT[lang]['SIGNDOWN_SUCCESS'] # Bot response
                 else: # Argument confirmation provided not valid
-                    bot_msg = TEXT['SIGNDOWN_CONFIRM_INVALID'] # Bot response
+                    bot_msg = TEXT[lang]['SIGNDOWN_CONFIRM_INVALID'] # Bot response
             else: # No argument or more than 1 argument provided
-                bot_msg = TEXT['SIGNDOWN_SURE'] # Bot response
+                bot_msg = TEXT[lang]['SIGNDOWN_SURE'] # Bot response
         else: # The user does not have an account yet
-            bot_msg = TEXT['NO_EXIST_USER'] # Bot response
+            bot_msg = TEXT[lang]['NO_EXIST_USER'] # Bot response
     else: # The FeedReader thread of this chat is running
-        bot_msg = TEXT['FEEDREADER_ACTIVE'] # Bot response
+        bot_msg = TEXT[lang]['FEEDREADER_ACTIVE'] # Bot response
     update.message.reply_text(bot_msg) # Bot reply
 
 
 def cmd_list(bot, update):
     '''/list command handler'''
-    bot_msg = 'Actual Feeds in chat:{}'.format(TEXT['LINE'])
+    bot_msg = 'Actual Feeds in chat:{}'.format(TEXT[lang]['LINE'])
     chat_id = update.message.chat_id # Get the chat ID
     fjson_chat_feeds = TSjson.TSjson('{}/{}.json'.format(CONST['CHATS_DIR'], chat_id)) # Chat file
     chat_feeds = fjson_chat_feeds.read_content() # Read the content of the file
@@ -477,17 +521,17 @@ def cmd_add(bot, update, args):
                     if feed['bozo'] == 0: # If valid feed
                         feed_title = feed['feed']['title'] # Get feed title
                         add_feed(user_id, chat_id, feed_title, feed_url) # Add to chat feeds file
-                        bot_msg = '{}{}'.format(TEXT['ADD_FEED'], feed_url) # Bot response
+                        bot_msg = '{}{}'.format(TEXT[lang]['ADD_FEED'], feed_url) # Bot response
                     else: # No valid feed
-                        bot_msg = TEXT['ADD_NO_ENTRIES'] # Bot response
+                        bot_msg = TEXT[lang]['ADD_NO_ENTRIES'] # Bot response
                 else: # Already subscribed to that feed
-                    bot_msg = TEXT['ADD_ALREADY_FEED'] # Bot response
+                    bot_msg = TEXT[lang]['ADD_ALREADY_FEED'] # Bot response
             else: # No argument or more than 1 argument provided
-                bot_msg = TEXT['ADD_NOT_ARG'] # Bot response
+                bot_msg = TEXT[lang]['ADD_NOT_ARG'] # Bot response
         else: # The user is not allowed (needs to sign-up)
-            bot_msg = TEXT['CMD_NOT_ALLOW'] # Bot response
+            bot_msg = TEXT[lang]['CMD_NOT_ALLOW'] # Bot response
     else: # The FeedReader thread of this chat is running
-        bot_msg = TEXT['FEEDREADER_ACTIVE'] # Bot response
+        bot_msg = TEXT[lang]['FEEDREADER_ACTIVE'] # Bot response
     update.message.reply_text(bot_msg) # Bot reply
 
 
@@ -501,15 +545,15 @@ def cmd_remove(bot, update, args):
                 feed_url = args[0] # Get the feed url provided (argument)
                 if subscribed(chat_id, feed_url): # If user is subscribed to that feed
                     remove_feed(chat_id, feed_url) # Remove from chat feeds file
-                    bot_msg = TEXT['RM_FEED'] # Bot response
+                    bot_msg = TEXT[lang]['RM_FEED'] # Bot response
                 else: # No subscribed to that feed
-                    bot_msg = TEXT['RM_NOT_SUBS'] # Bot response
+                    bot_msg = TEXT[lang]['RM_NOT_SUBS'] # Bot response
             else: # No argument or more than 1 argument provided
-                bot_msg = TEXT['RM_NOT_ARG'] # Bot response
+                bot_msg = TEXT[lang]['RM_NOT_ARG'] # Bot response
         else: # The user does not have an account yet
-            bot_msg = TEXT['CMD_NOT_ALLOW'] # Bot response
+            bot_msg = TEXT[lang]['CMD_NOT_ALLOW'] # Bot response
     else: # The FeedReader thread of this chat is running
-        bot_msg = TEXT['FEEDREADER_ACTIVE'] # Bot response
+        bot_msg = TEXT[lang]['FEEDREADER_ACTIVE'] # Bot response
     update.message.reply_text(bot_msg) # Bot reply
 
 
@@ -522,19 +566,18 @@ def cmd_enable(bot, update):
     if user_is_signedup(user_id): # If the user is signed-up
         if is_not_active(chat_id): # If the actual chat is not an active FeedReader thread
             if any_subscription(chat_id): # If there is any feed subscription
-                thr_feed = CchatFeed(args=(chat_id, bot)) # Create and launch actual chat feeds threads
-                #thr_feed.setDaemon(True) # Set the thread as daemon
+                thr_feed = CchatFeed(args=(chat_id, lang, bot)) # Launch actual chat feeds thread
                 threads_lock.acquire() # Lock the active threads variable
                 threads.append(thr_feed) # Add actual thread to the active threads variable
                 threads_lock.release() # Release the active threads variable lock
                 thr_feed.start() # Launch the thread
-                bot_msg = TEXT['ENA_ENABLED'] # Bot response
+                bot_msg = TEXT[lang]['ENA_ENABLED'] # Bot response
             else: # No feed subscription
-                bot_msg = TEXT['ENA_NOT_SUBS'] # Bot response
+                bot_msg = TEXT[lang]['ENA_NOT_SUBS'] # Bot response
         else: # Actual chat FeedReader thread currently running
-            bot_msg = TEXT['ENA_NOT_DISABLED'] # Bot response
+            bot_msg = TEXT[lang]['ENA_NOT_DISABLED'] # Bot response
     else:
-        bot_msg = TEXT['CMD_NOT_ALLOW'] # Bot response
+        bot_msg = TEXT[lang]['CMD_NOT_ALLOW'] # Bot response
     update.message.reply_text(bot_msg) # Bot reply
 
 
@@ -545,17 +588,17 @@ def cmd_disable(bot, update):
     chat_id = update.message.chat_id # Get the chat id
     user_id = update.message.from_user.id # Get the user ID
     if user_is_signedup(user_id): # If the user is signed-up
-        bot_msg = TEXT['DIS_NOT_ENABLED'] # Bot response
+        bot_msg = TEXT[lang]['DIS_NOT_ENABLED'] # Bot response
         threads_lock.acquire() # Lock the active threads variable
         for thr_feed in threads: # For each active thread
             if thr_feed.isAlive(): # Make sure that the thread is really active
                 if chat_id == thr_feed.get_id(): # If the actual chat is in the active threads
                     thr_feed.finish() # Finish the thread
                     threads.remove(thr_feed) # Remove actual thread from the active threads variable
-                    bot_msg = TEXT['DIS_DISABLED'] # Bot response
+                    bot_msg = TEXT[lang]['DIS_DISABLED'] # Bot response
         threads_lock.release() # Release the active threads variable lock
     else:
-        bot_msg = TEXT['CMD_NOT_ALLOW'] # Bot response
+        bot_msg = TEXT[lang]['CMD_NOT_ALLOW'] # Bot response
     update.message.reply_text(bot_msg) # Bot reply
 
 ####################################################################################################
@@ -569,6 +612,8 @@ def main():
     # Set the received commands handlers into the dispatcher
     disp.add_handler(CommandHandler("start", cmd_start))
     disp.add_handler(CommandHandler("help", cmd_help))
+    disp.add_handler(CommandHandler("commands", cmd_commands))
+    disp.add_handler(CommandHandler("language", cmd_language, pass_args=True))
     disp.add_handler(CommandHandler("signup", cmd_signup, pass_args=True))
     disp.add_handler(CommandHandler("signdown", cmd_signdown, pass_args=True))
     disp.add_handler(CommandHandler("list", cmd_list))
