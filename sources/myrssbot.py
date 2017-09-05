@@ -9,15 +9,16 @@ Author:
 Creation date:
     23/08/2017
 Last modified date:
-    01/09/2017
+    05/09/2017
 Version:
-    1.0.0
+    1.0.1
 '''
 
 ####################################################################################################
 
 ### Imported modules ###
 import re
+import logging
 from os import path
 from time import sleep
 from threading import Thread, Lock
@@ -29,6 +30,16 @@ from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, Regex
 
 import TSjson
 from constants import CONST, TEXT
+
+####################################################################################################
+
+# Logg stuffs
+logger = logging.getLogger(__name__)
+hdlr = logging.FileHandler('log.log')
+formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+hdlr.setFormatter(formatter)
+logger.addHandler(hdlr) 
+logger.setLevel(logging.WARNING)
 
 ####################################################################################################
 
@@ -87,6 +98,23 @@ class CchatFeed(Thread):
         return text_out
 
 
+    def remove_complex_html(self, pattern, html_text):
+        ''' Remove complex anoying HTML structures'''
+        output = html_text
+        # Create the pattern element and search for it in the text
+        _pattern = re.compile(pattern)
+        result = _pattern.search(output)
+        # If there is a search result (found)
+        if result:
+            # Get the to delete substring and replace it to empty in the original text
+            to_del = result.group(0)
+            output = output.replace(to_del, '')
+            # Try to do it again (maybe there is more same structures in the text)
+            output = self.remove_complex_html(pattern, output)
+        # If there is no search result for that pattern, return the modify text
+        return output
+
+
     def html_fix_tlg(self, summary):
         '''Remove all anoying HTML tags from entries summary'''
         # Put the input into output
@@ -97,27 +125,9 @@ class CchatFeed(Thread):
                 output = output.replace(tag, '\n')
             else:
                 output = output.replace(tag, '')
-        # Remove every HTML more complex structures
-        pattern = re.compile("<img(.*?)>")
-        result = pattern.search(output)
-        if result:
-            to_del = "<img{}>".format(result.group(1))
-            output = output.replace(to_del, '')
-        pattern = re.compile("<img(.*?)/>")
-        result = pattern.search(output)
-        if result:
-            to_del = "<img{}/>".format(result.group(1))
-            output = output.replace(to_del, '')
-        pattern = re.compile("<div(.*?)>")
-        result = pattern.search(output)
-        if result:
-            to_del = "<div{}>".format(result.group(1))
-            output = output.replace(to_del, '')
-        pattern = re.compile("<div(.*?)/>")
-        result = pattern.search(output)
-        if result:
-            to_del = "<div{}/>".format(result.group(1))
-            output = output.replace(to_del, '')
+            # Remove every HTML more complex structures (i.e. <img> to <img(.*?)>)
+            tag_struct = '{}{}{}'.format(tag[:len(tag)-1], '(.*?)', tag[len(tag)-1:])
+            output = self.remove_complex_html(tag_struct, output)
         return output
 
 
@@ -135,9 +145,9 @@ class CchatFeed(Thread):
         for feed in feeds:
             # Parse and get feed data
             feedparse = parse(feed['URL'])
-            feed_to_add = {'Title': '', 'Link' : '', 'Entries' : []}
+            feed_to_add = {'Title': '', 'URL' : '', 'Entries' : []}
             feed_to_add['Title'] = feedparse['feed']['title']
-            feed_to_add['Link'] = feedparse['feed']['link']
+            feed_to_add['URL'] = feedparse['feed']['link']
             # Determine number of entries to show
             if len(feedparse['entries']) >= CONST['NUM_SHOW_ENTRIES']:
                 entries_to_show = CONST['NUM_SHOW_ENTRIES']
@@ -147,11 +157,11 @@ class CchatFeed(Thread):
             if entries_to_show:
                 # For entries to show, get entry data
                 for i in range(entries_to_show-1, -1, -1):
-                    entry = {'Title': '', 'Published' : '', 'Summary' : '', 'Link' : ''}
+                    entry = {'Title': '', 'Published' : '', 'Summary' : '', 'URL' : ''}
                     entry['Title'] = feedparse['entries'][i]['title']
                     entry['Published'] = feedparse['entries'][i]['published']
                     entry['Summary'] = feedparse['entries'][i]['summary']
-                    entry['Link'] = feedparse['entries'][i]['link']
+                    entry['URL'] = feedparse['entries'][i]['link']
                     # Fix summary text to be allowed by telegram
                     entry['Summary'] = self.html_fix_tlg(entry['Summary'])
                     # Truncate entry summary if it is more than MAX_ENTRY_SUMMARY chars
@@ -182,8 +192,8 @@ class CchatFeed(Thread):
                 if feed['Entries']:
                     # Get the last entry and prepare the bot response message
                     last_entry = feed['Entries'][len(feed['Entries']) - 1]
-                    feed_titl = '<a href="{}">{}</a>'.format(feed['Link'], feed['Title'])
-                    entry_titl = '<a href="{}">{}</a>'.format(last_entry['Link'], \
+                    feed_titl = '<a href="{}">{}</a>'.format(feed['URL'], feed['Title'])
+                    entry_titl = '<a href="{}">{}</a>'.format(last_entry['URL'], \
                             last_entry['Title'])
                     bot_msg = '<b>Feed:</b>\n{}{}<b>Last entry:</b>\n\n{}\n{}\n\n{}'.format( \
                             feed_titl, TEXT[self.lang]['LINE'], entry_titl, \
@@ -195,17 +205,22 @@ class CchatFeed(Thread):
                             self.bot.send_message(chat_id=self.chat_id, text=msg, \
                                     parse_mode=ParseMode.HTML)
                         except Exception as error:
+                            logger.error('Bot msg to send parse html error:\n%s\n%s\n\n', error, msg)
                             print('Bot msg to send parse html error:\n{}\n'.format(error))
+                            print('Entry summary:')
+                            print(last_entry['Summary'])
                 else:
                     # Send a message to tell that this feed does not have any entry
-                    feed_titl = '<a href="{}">{}</a>'.format(feed['Link'], feed['Title'])
+                    feed_titl = '<a href="{}">{}</a>'.format(feed['URL'], feed['Title'])
                     bot_msg = '<b>Feed:</b>\n{}{}\n{}'.format(feed_titl, TEXT[self.lang]['LINE'], \
                             TEXT[self.lang]['NO_ENTRIES'])
                     try:
                         self.bot.send_message(chat_id=self.chat_id, text=bot_msg, \
                                 parse_mode=ParseMode.HTML)
                     except Exception as error:
+                        logger.error('Bot msg to send parse html error:\n%s\n%s\n\n', error, bot_msg)
                         print('Bot msg to send parse html error:\n{}\n'.format(error))
+                        print('No entries.')
                 # Delay between messages
                 sleep(0.8)
 
@@ -217,10 +232,12 @@ class CchatFeed(Thread):
                 if feed['Entries']:
                     num_sent = 0
                     for entry in feed['Entries']:
-                        if entry not in last_entries:
+                        # If there is not an entry with that title in last_entries
+                        _d = {}
+                        if not any(_d.get('Title', None) == entry['Title'] for _d in last_entries):
                             # Send the telegram message/s
-                            feed_titl = '<a href="{}">{}</a>'.format(feed['Link'], feed['Title'])
-                            entry_titl = '<a href="{}">{}</a>'.format(entry['Link'], entry['Title'])
+                            feed_titl = '<a href="{}">{}</a>'.format(feed['URL'], feed['Title'])
+                            entry_titl = '<a href="{}">{}</a>'.format(entry['URL'], entry['Title'])
                             bot_msg = '{}{}{}\n{}\n\n{}'.format(feed_titl, \
                                     TEXT[self.lang]['LINE'], entry_titl, entry['Published'], \
                                     entry['Summary'])
@@ -231,7 +248,10 @@ class CchatFeed(Thread):
                                             parse_mode=ParseMode.HTML)
                                     num_sent = num_sent + 1
                                 except Exception as error:
+                                    logger.error('Bot msg to send parse html error:\n%s\n%s\n\n', error, msg)
                                     print('Bot msg to send parse html error:\n{}\n'.format(error))
+                                    print('Entry summary:')
+                                    print(entry['Summary'])
                             if num_sent % 5:
                                 sleep(1)
 
@@ -240,7 +260,7 @@ class CchatFeed(Thread):
         '''thread method that run when the thread is launched (thread.start() is call)'''
         # Initial values of variables
         last_entries = []
-        actual_feeds = [{'Title': '', 'Link' : '', 'Entries' : []}]
+        actual_feeds = [{'Title': '', 'URL' : '', 'Entries' : []}]
         # Read chat feeds from json file content and determine actual feeds
         feeds = self.read_feeds()
         actual_feeds = self.parse_feeds(feeds)
@@ -415,21 +435,25 @@ def remove_feed(chat_id, feed_url):
 ### Received commands handlers ###
 def cmd_start(bot, update):
     '''/start command handler'''
-    update.message.reply_text(TEXT[lang]['START']) # Bot reply
+    chat_id = update.message.chat_id # Get the chat id
+    bot.send_message(chat_id=chat_id, text=TEXT[lang]['START']) # Bot reply
 
 
 def cmd_help(bot, update):
     '''/help command handler'''
-    update.message.reply_text(TEXT[lang]['HELP']) # Bot reply
+    chat_id = update.message.chat_id # Get the chat id
+    bot.send_message(chat_id=chat_id, text=TEXT[lang]['HELP']) # Bot reply
 
 
 def cmd_commands(bot, update):
     '''/commands command handler'''
-    update.message.reply_text(TEXT[lang]['COMMANDS']) # Bot reply
+    chat_id = update.message.chat_id # Get the chat id
+    bot.send_message(chat_id=chat_id, text=TEXT[lang]['COMMANDS']) # Bot reply
 
 
 def cmd_language(bot, update, args):
     '''/languaje command handler'''
+    chat_id = update.message.chat_id # Get the chat id
     if len(args) == 1: # If 1 argument has been provided
         if user_is_signedup(update.message.from_user.id): # If the user is signed-up
             lang_provided = args[0] # Get the language provided (argument)
@@ -445,7 +469,7 @@ def cmd_language(bot, update, args):
             bot_msg = TEXT[lang]['CMD_NOT_ALLOW'] # Bot response
     else: # No argument or more than 1 argument provided
         bot_msg = TEXT[lang]['LANG_NOT_ARG'] # Bot response
-    update.message.reply_text(bot_msg) # Bot reply
+    bot.send_message(chat_id=chat_id, text=bot_msg) # Bot reply
 
 
 def cmd_signup(bot, update, args):
@@ -466,7 +490,7 @@ def cmd_signup(bot, update, args):
             bot_msg = TEXT[lang]['SIGNUP_NOT_ARG'] # Bot response
     else: # The FeedReader thread of this chat is running
         bot_msg = TEXT[lang]['FEEDREADER_ACTIVE'] # Bot response
-    update.message.reply_text(bot_msg) # Bot reply
+    bot.send_message(chat_id=chat_id, text=bot_msg) # Bot reply
 
 
 def cmd_signdown(bot, update, args):
@@ -488,7 +512,7 @@ def cmd_signdown(bot, update, args):
             bot_msg = TEXT[lang]['NO_EXIST_USER'] # Bot response
     else: # The FeedReader thread of this chat is running
         bot_msg = TEXT[lang]['FEEDREADER_ACTIVE'] # Bot response
-    update.message.reply_text(bot_msg) # Bot reply
+    bot.send_message(chat_id=chat_id, text=bot_msg) # Bot reply
 
 
 def cmd_list(bot, update):
@@ -501,10 +525,9 @@ def cmd_list(bot, update):
         chat_feeds = chat_feeds[0]
         # For each feed
         for feed in chat_feeds['Feeds']:
-            feed_title = feed['Title']
-            feed_url = feed['URL']
-            bot_msg = '{}\n{}\n{}\n'.format(bot_msg, feed_title, feed_url)
-    update.message.reply_text(bot_msg) # Bot reply
+            feed_titl = '<a href="{}">{}</a>'.format(feed['URL'], feed['Title'])
+            bot_msg = '{}{}\n\n'.format(bot_msg, feed_titl)
+    bot.send_message(chat_id=chat_id, text=bot_msg, parse_mode=ParseMode.HTML)
 
 
 def cmd_add(bot, update, args):
@@ -532,7 +555,7 @@ def cmd_add(bot, update, args):
             bot_msg = TEXT[lang]['CMD_NOT_ALLOW'] # Bot response
     else: # The FeedReader thread of this chat is running
         bot_msg = TEXT[lang]['FEEDREADER_ACTIVE'] # Bot response
-    update.message.reply_text(bot_msg) # Bot reply
+    bot.send_message(chat_id=chat_id, text=bot_msg) # Bot reply
 
 
 def cmd_remove(bot, update, args):
@@ -554,7 +577,7 @@ def cmd_remove(bot, update, args):
             bot_msg = TEXT[lang]['CMD_NOT_ALLOW'] # Bot response
     else: # The FeedReader thread of this chat is running
         bot_msg = TEXT[lang]['FEEDREADER_ACTIVE'] # Bot response
-    update.message.reply_text(bot_msg) # Bot reply
+    bot.send_message(chat_id=chat_id, text=bot_msg) # Bot reply
 
 
 def cmd_enable(bot, update):
@@ -578,7 +601,7 @@ def cmd_enable(bot, update):
             bot_msg = TEXT[lang]['ENA_NOT_DISABLED'] # Bot response
     else:
         bot_msg = TEXT[lang]['CMD_NOT_ALLOW'] # Bot response
-    update.message.reply_text(bot_msg) # Bot reply
+    bot.send_message(chat_id=chat_id, text=bot_msg) # Bot reply
 
 
 def cmd_disable(bot, update):
@@ -599,7 +622,7 @@ def cmd_disable(bot, update):
         threads_lock.release() # Release the active threads variable lock
     else:
         bot_msg = TEXT[lang]['CMD_NOT_ALLOW'] # Bot response
-    update.message.reply_text(bot_msg) # Bot reply
+    bot.send_message(chat_id=chat_id, text=bot_msg) # Bot reply
 
 ####################################################################################################
 

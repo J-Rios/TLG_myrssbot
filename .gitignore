@@ -2,3 +2,4 @@ sources/.vscode/
 sources/__pycache__/
 sources/data/
 *.pyc
+*.log
