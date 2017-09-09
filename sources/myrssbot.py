@@ -9,9 +9,9 @@ Author:
 Creation date:
     23/08/2017
 Last modified date:
-    05/09/2017
+    09/09/2017
 Version:
-    1.0.1
+    1.1.0
 '''
 
 ####################################################################################################
@@ -27,6 +27,7 @@ from feedparser import parse
 from telegram import MessageEntity, ParseMode, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, RegexHandler, \
                          ConversationHandler, CallbackQueryHandler
+from telegram.error import TelegramError, TimedOut
 
 import TSjson
 from constants import CONST, TEXT
@@ -38,7 +39,7 @@ logger = logging.getLogger(__name__)
 hdlr = logging.FileHandler('log.log')
 formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
 hdlr.setFormatter(formatter)
-logger.addHandler(hdlr) 
+logger.addHandler(hdlr)
 logger.setLevel(logging.WARNING)
 
 ####################################################################################################
@@ -54,6 +55,7 @@ lang_lock = Lock()
 ### Class for chats FeedReader threads ###
 class CchatFeed(Thread):
     '''Threaded chat feed class to manage each chat feedparser'''
+    
     def __init__(self, args):
         ''' Class constructor'''
         Thread.__init__(self)
@@ -74,6 +76,60 @@ class CchatFeed(Thread):
         self.lock.acquire()
         self.end = True
         self.lock.release()
+
+
+    def tlg_send_text(self, message):
+        '''Try to send a Telegram text message'''
+        sent = False
+        # Split the message if it is higher than the TLG message legth limit
+        messages = self.split_tlg_msgs(message)
+        for msg in messages:
+            # Try to send the message with HTML Parsing
+            try:
+                sent = True
+                self.bot.send_message(chat_id=self.chat_id, text=msg)
+            # Fail to send the telegram message. Print & write the error in Log file
+            except TimedOut:
+                pass
+            except TelegramError as error:
+                sent = False
+                logger.error('%s\n%s\n%s\n\n', error, TEXT[self.lang]['LINE'], msg)
+                print('{}\n{}\n{}\n\n'.format(error, TEXT[self.lang]['LINE'], msg))
+        return sent
+
+
+    def tlg_send_html(self, message):
+        '''Try to send a Telegram message with HTML content'''
+        sent = False
+        # Split the message if it is higher than the TLG message legth limit
+        messages = self.split_tlg_msgs(message)
+        for msg in messages:
+            # Try to send the message with HTML Parsing
+            try:
+                sent = True
+                self.bot.send_message(chat_id=self.chat_id, text=msg, parse_mode=ParseMode.HTML)
+            # Fail to parse HTML and send telegram message. Print & write the error in Log file
+            except TimedOut:
+                pass
+            except TelegramError as error:
+                sent = False
+                logger.error('%s\n%s\n%s\n\n', error, TEXT[self.lang]['LINE'], msg)
+                print('{}\n{}\n{}\n\n'.format(error, TEXT[self.lang]['LINE'], msg))
+            # If send fail
+            if not sent:
+                # Add an end tag character (>) and try to send the message again
+                msg = '{}>'.format(msg)
+                try:
+                    sent = True
+                    self.bot.send_message(chat_id=self.chat_id, text=msg, parse_mode=ParseMode.HTML)
+                # Fail to parse HTML and send telegram message. Print & write the error in Log file
+                except TimedOut:
+                    pass
+                except TelegramError as error:
+                    sent = False
+                    logger.error('%s\n%s\n%s\n\n', error, TEXT[self.lang]['LINE'], msg)
+                    print('{}\n{}\n{}\n\n'.format(error, TEXT[self.lang]['LINE'], msg))
+        return sent
 
 
     def split_tlg_msgs(self, text_in):
@@ -104,12 +160,12 @@ class CchatFeed(Thread):
         # Create the pattern element and search for it in the text
         _pattern = re.compile(pattern)
         result = _pattern.search(output)
-        # If there is a search result (found)
+        # If there is a search result (pattern found)
         if result:
-            # Get the to delete substring and replace it to empty in the original text
+            # Get the to-delete substring and replace it to empty in the original text
             to_del = result.group(0)
             output = output.replace(to_del, '')
-            # Try to do it again (maybe there is more same structures in the text)
+            # Try to do it again (recursively, maybe there is more same structures in the text)
             output = self.remove_complex_html(pattern, output)
         # If there is no search result for that pattern, return the modify text
         return output
@@ -138,6 +194,23 @@ class CchatFeed(Thread):
         return chat_feeds[0]['Feeds']
 
 
+    def valid_feed(self, feed_parsed):
+        '''Check if the given feed is valid (has title and link keys)'''
+        valid = False
+        if ('title' in feed_parsed['feed']) and ('link' in feed_parsed['feed']):
+            valid = True
+        return valid
+
+
+    def valid_entry(self, entry):
+        '''Check if the given entry is valid (has title, published, summary and link keys)'''
+        valid = False
+        if ('title' in entry) and ('published' in entry):
+            if ('summary' in entry) and ('link' in entry):
+                valid = True
+        return valid
+
+
     def parse_feeds(self, feeds):
         '''Parse all feeds and determine all feed and entries data'''
         actual_feeds = []
@@ -145,33 +218,35 @@ class CchatFeed(Thread):
         for feed in feeds:
             # Parse and get feed data
             feedparse = parse(feed['URL'])
-            feed_to_add = {'Title': '', 'URL' : '', 'Entries' : []}
-            feed_to_add['Title'] = feedparse['feed']['title']
-            feed_to_add['URL'] = feedparse['feed']['link']
-            # Determine number of entries to show
-            if len(feedparse['entries']) >= CONST['NUM_SHOW_ENTRIES']:
-                entries_to_show = CONST['NUM_SHOW_ENTRIES']
-            else:
-                entries_to_show = len(feedparse['entries'])
-            # If there is any entry
-            if entries_to_show:
-                # For entries to show, get entry data
-                for i in range(entries_to_show-1, -1, -1):
-                    entry = {'Title': '', 'Published' : '', 'Summary' : '', 'URL' : ''}
-                    entry['Title'] = feedparse['entries'][i]['title']
-                    entry['Published'] = feedparse['entries'][i]['published']
-                    entry['Summary'] = feedparse['entries'][i]['summary']
-                    entry['URL'] = feedparse['entries'][i]['link']
-                    # Fix summary text to be allowed by telegram
-                    entry['Summary'] = self.html_fix_tlg(entry['Summary'])
-                    # Truncate entry summary if it is more than MAX_ENTRY_SUMMARY chars
-                    if len(entry['Summary']) > CONST['MAX_ENTRY_SUMMARY']:
-                        entry['Summary'] = entry['Summary'][0:CONST['MAX_ENTRY_SUMMARY']]
-                        entry['Summary'] = '{}...'.format(entry['Summary'])
-                    # Add feed entry data to feed variable
-                    feed_to_add['Entries'].append(entry)
-            # Add feed data to actual feeds variable
-            actual_feeds.append(feed_to_add)
+            if self.valid_feed(feedparse):
+                feed_to_add = {'Title': '', 'URL' : '', 'Entries' : []}
+                feed_to_add['Title'] = feedparse['feed']['title']
+                feed_to_add['URL'] = feedparse['feed']['link']
+                # Determine number of entries to show
+                if len(feedparse['entries']) >= CONST['NUM_SHOW_ENTRIES']:
+                    entries_to_show = CONST['NUM_SHOW_ENTRIES']
+                else:
+                    entries_to_show = len(feedparse['entries'])
+                # If there is any entry
+                if entries_to_show:
+                    # For entries to show, get entry data
+                    for i in range(entries_to_show-1, -1, -1):
+                        if self.valid_entry(feedparse['entries'][i]):
+                            entry = {'Title': '', 'Published' : '', 'Summary' : '', 'URL' : ''}
+                            entry['Title'] = feedparse['entries'][i]['title']
+                            entry['Published'] = feedparse['entries'][i]['published']
+                            entry['Summary'] = feedparse['entries'][i]['summary']
+                            entry['URL'] = feedparse['entries'][i]['link']
+                            # Fix summary text to be allowed by telegram
+                            entry['Summary'] = self.html_fix_tlg(entry['Summary'])
+                            # Truncate entry summary if it is more than MAX_ENTRY_SUMMARY chars
+                            if len(entry['Summary']) > CONST['MAX_ENTRY_SUMMARY']:
+                                entry['Summary'] = entry['Summary'][0:CONST['MAX_ENTRY_SUMMARY']]
+                                entry['Summary'] = '{}...'.format(entry['Summary'])
+                            # Add feed entry data to feed variable
+                            feed_to_add['Entries'].append(entry)
+                # Add feed data to actual feeds variable
+                actual_feeds.append(feed_to_add)
         return actual_feeds
 
 
@@ -198,66 +273,49 @@ class CchatFeed(Thread):
                     bot_msg = '<b>Feed:</b>\n{}{}<b>Last entry:</b>\n\n{}\n{}\n\n{}'.format( \
                             feed_titl, TEXT[self.lang]['LINE'], entry_titl, \
                             last_entry['Published'], last_entry['Summary'])
-                    # Split the message if it is higher than the TLG message legth limit and send it
-                    bot_msg = self.split_tlg_msgs(bot_msg)
-                    for msg in bot_msg:
-                        try:
-                            self.bot.send_message(chat_id=self.chat_id, text=msg, \
-                                    parse_mode=ParseMode.HTML)
-                        except Exception as error:
-                            logger.error('Bot msg to send parse html error:\n%s\n%s\n\n', error, msg)
-                            print('Bot msg to send parse html error:\n{}\n'.format(error))
-                            print('Entry summary:')
-                            print(last_entry['Summary'])
+                    # Send the message
+                    sent = self.tlg_send_html(bot_msg)
+                    if not sent:
+                        self.tlg_send_text(bot_msg)
                 else:
                     # Send a message to tell that this feed does not have any entry
                     feed_titl = '<a href="{}">{}</a>'.format(feed['URL'], feed['Title'])
                     bot_msg = '<b>Feed:</b>\n{}{}\n{}'.format(feed_titl, TEXT[self.lang]['LINE'], \
                             TEXT[self.lang]['NO_ENTRIES'])
-                    try:
-                        self.bot.send_message(chat_id=self.chat_id, text=bot_msg, \
-                                parse_mode=ParseMode.HTML)
-                    except Exception as error:
-                        logger.error('Bot msg to send parse html error:\n%s\n%s\n\n', error, bot_msg)
-                        print('Bot msg to send parse html error:\n{}\n'.format(error))
-                        print('No entries.')
+                    sent = self.tlg_send_html(bot_msg)
+                    if not sent:
+                        self.tlg_send_text(bot_msg)
                 # Delay between messages
                 sleep(0.8)
 
 
     def bot_send_feeds_changes(self, actual_feeds, last_entries):
         '''Checks and send telegram feeds message/s if any change was made in the feeds entries'''
-        if actual_feeds:
-            for feed in actual_feeds:
-                if feed['Entries']:
-                    num_sent = 0
-                    for entry in feed['Entries']:
-                        # If there is not an entry with that title in last_entries
-                        _d = {}
-                        if not any(_d.get('Title', None) == entry['Title'] for _d in last_entries):
-                            # Send the telegram message/s
-                            feed_titl = '<a href="{}">{}</a>'.format(feed['URL'], feed['Title'])
-                            entry_titl = '<a href="{}">{}</a>'.format(entry['URL'], entry['Title'])
-                            bot_msg = '{}{}{}\n{}\n\n{}'.format(feed_titl, \
-                                    TEXT[self.lang]['LINE'], entry_titl, entry['Published'], \
-                                    entry['Summary'])
-                            bot_msg = self.split_tlg_msgs(bot_msg)
-                            for msg in bot_msg:
-                                try:
-                                    self.bot.send_message(chat_id=self.chat_id, text=msg, \
-                                            parse_mode=ParseMode.HTML)
-                                    num_sent = num_sent + 1
-                                except Exception as error:
-                                    logger.error('Bot msg to send parse html error:\n%s\n%s\n\n', error, msg)
-                                    print('Bot msg to send parse html error:\n{}\n'.format(error))
-                                    print('Entry summary:')
-                                    print(entry['Summary'])
-                            if num_sent % 5:
-                                sleep(1)
+        for feed in actual_feeds:
+            if feed['Entries']:
+                num_sent = 0
+                for entry in feed['Entries']:
+                    # If there is not an entry with that title in last_entries
+                    _d = {}
+                    if not any(_d.get('Title', None) == entry['Title'] for _d in last_entries):
+                        # Send the telegram message/s
+                        feed_titl = '<a href="{}">{}</a>'.format(feed['URL'], feed['Title'])
+                        entry_titl = '<a href="{}">{}</a>'.format(entry['URL'], entry['Title'])
+                        bot_msg = '{}{}{}\n{}\n\n{}'.format(feed_titl, \
+                                TEXT[self.lang]['LINE'], entry_titl, entry['Published'], \
+                                entry['Summary'])
+                        # Send the message
+                        sent = self.tlg_send_html(bot_msg)
+                        if not sent:
+                            self.tlg_send_text(bot_msg)
+                        if num_sent % 5:
+                            sleep(1)
 
 
     def run(self):
         '''thread method that run when the thread is launched (thread.start() is call)'''
+        # Notify that the FeedReader is enabled
+        self.tlg_send_text(TEXT[lang]['FR_ENABLED'])
         # Initial values of variables
         last_entries = []
         actual_feeds = [{'Title': '', 'URL' : '', 'Entries' : []}]
@@ -277,7 +335,7 @@ class CchatFeed(Thread):
             self.bot_send_feeds_changes(actual_feeds, last_entries)
             # Update last entries
             last_entries = self.get_entries(actual_feeds[:])
-            sleep(CONST['T_USER_FEEDS'])
+            sleep(CONST['T_FEEDS'])
 
 ####################################################################################################
 
@@ -489,7 +547,7 @@ def cmd_signup(bot, update, args):
         else: # No argument or more than 1 argument provided
             bot_msg = TEXT[lang]['SIGNUP_NOT_ARG'] # Bot response
     else: # The FeedReader thread of this chat is running
-        bot_msg = TEXT[lang]['FEEDREADER_ACTIVE'] # Bot response
+        bot_msg = TEXT[lang]['FR_ACTIVE'] # Bot response
     bot.send_message(chat_id=chat_id, text=bot_msg) # Bot reply
 
 
@@ -511,7 +569,7 @@ def cmd_signdown(bot, update, args):
         else: # The user does not have an account yet
             bot_msg = TEXT[lang]['NO_EXIST_USER'] # Bot response
     else: # The FeedReader thread of this chat is running
-        bot_msg = TEXT[lang]['FEEDREADER_ACTIVE'] # Bot response
+        bot_msg = TEXT[lang]['FR_ACTIVE'] # Bot response
     bot.send_message(chat_id=chat_id, text=bot_msg) # Bot reply
 
 
@@ -554,7 +612,7 @@ def cmd_add(bot, update, args):
         else: # The user is not allowed (needs to sign-up)
             bot_msg = TEXT[lang]['CMD_NOT_ALLOW'] # Bot response
     else: # The FeedReader thread of this chat is running
-        bot_msg = TEXT[lang]['FEEDREADER_ACTIVE'] # Bot response
+        bot_msg = TEXT[lang]['FR_ACTIVE'] # Bot response
     bot.send_message(chat_id=chat_id, text=bot_msg) # Bot reply
 
 
@@ -576,7 +634,7 @@ def cmd_remove(bot, update, args):
         else: # The user does not have an account yet
             bot_msg = TEXT[lang]['CMD_NOT_ALLOW'] # Bot response
     else: # The FeedReader thread of this chat is running
-        bot_msg = TEXT[lang]['FEEDREADER_ACTIVE'] # Bot response
+        bot_msg = TEXT[lang]['FR_ACTIVE'] # Bot response
     bot.send_message(chat_id=chat_id, text=bot_msg) # Bot reply
 
 
@@ -590,18 +648,17 @@ def cmd_enable(bot, update):
         if is_not_active(chat_id): # If the actual chat is not an active FeedReader thread
             if any_subscription(chat_id): # If there is any feed subscription
                 thr_feed = CchatFeed(args=(chat_id, lang, bot)) # Launch actual chat feeds thread
+                thr_feed.name = 'FeedReader {}'.format(chat_id) # Give a thread name with chat ID
                 threads_lock.acquire() # Lock the active threads variable
                 threads.append(thr_feed) # Add actual thread to the active threads variable
                 threads_lock.release() # Release the active threads variable lock
                 thr_feed.start() # Launch the thread
-                bot_msg = TEXT[lang]['ENA_ENABLED'] # Bot response
             else: # No feed subscription
-                bot_msg = TEXT[lang]['ENA_NOT_SUBS'] # Bot response
+                bot.send_message(chat_id=chat_id, text=TEXT[lang]['ENA_NOT_SUBS']) # Bot reply
         else: # Actual chat FeedReader thread currently running
-            bot_msg = TEXT[lang]['ENA_NOT_DISABLED'] # Bot response
+            bot.send_message(chat_id=chat_id, text=TEXT[lang]['ENA_NOT_DISABLED']) # Bot reply
     else:
-        bot_msg = TEXT[lang]['CMD_NOT_ALLOW'] # Bot response
-    bot.send_message(chat_id=chat_id, text=bot_msg) # Bot reply
+        bot.send_message(chat_id=chat_id, text=TEXT[lang]['CMD_NOT_ALLOW']) # Bot reply
 
 
 def cmd_disable(bot, update):
@@ -610,6 +667,7 @@ def cmd_disable(bot, update):
     global threads_lock # Use the global lock for active threads
     chat_id = update.message.chat_id # Get the chat id
     user_id = update.message.from_user.id # Get the user ID
+    removed = False
     if user_is_signedup(user_id): # If the user is signed-up
         bot_msg = TEXT[lang]['DIS_NOT_ENABLED'] # Bot response
         threads_lock.acquire() # Lock the active threads variable
@@ -618,11 +676,13 @@ def cmd_disable(bot, update):
                 if chat_id == thr_feed.get_id(): # If the actual chat is in the active threads
                     thr_feed.finish() # Finish the thread
                     threads.remove(thr_feed) # Remove actual thread from the active threads variable
-                    bot_msg = TEXT[lang]['DIS_DISABLED'] # Bot response
+                    removed = True
+                    bot.send_message(chat_id=chat_id, text=TEXT[lang]['FR_DISABLED']) # Bot reply
         threads_lock.release() # Release the active threads variable lock
-    else:
-        bot_msg = TEXT[lang]['CMD_NOT_ALLOW'] # Bot response
-    bot.send_message(chat_id=chat_id, text=bot_msg) # Bot reply
+    else: # The user is not signed-up
+        bot.send_message(chat_id=chat_id, text=TEXT[lang]['CMD_NOT_ALLOW']) # Bot reply
+    if not removed: # If the feed was not found enabled
+        bot.send_message(chat_id=chat_id, text=bot_msg) # Bot reply
 
 ####################################################################################################
 

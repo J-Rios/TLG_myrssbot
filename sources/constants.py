@@ -9,9 +9,9 @@ Author:
 Creation date:
     23/08/2017
 Last modified date:
-    05/09/2017
+    09/09/2017
 Version:
-    1.0.1
+    1.1.0
 '''
 
 ####################################################################################################
@@ -19,23 +19,23 @@ Version:
 ### Constants ###
 CONST = {
     'DEVELOPER' : '@JoseTLG', # Developer Telegram contact
-    'DATE' : '05/09/2017', # Last modified date
-    'VERSION' : '1.0.1', # Actual version
+    'DATE' : '09/09/2017', # Last modified date
+    'VERSION' : '1.1.0', # Actual version
     'TOKEN' : 'XXXXXXXXX:XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', # Bot Token (get it from @BotFather)
     'REG_KEY' : 'registrationKey1234', # User registration Key (for signup and let use the Bot)
     'CHATS_DIR' : './data/chats', # Path of chats data directory
     'USERS_LIST_FILE' : './data/users_list.json', # Json file of signed-up users list
     'TLG_MSG_MAX_CHARS' : 4095, # Max number of characters per message allowed by Telegram
-    'MAX_ENTRY_SUMMARY' : 1000, # Max number of characters in entry summary (description)
+    'MAX_ENTRY_SUMMARY' : 2500, # Max number of characters in entry summary (description)
     'NUM_SHOW_ENTRIES' : 5, # Number of max entries to monitorize and show
-    'T_USER_FEEDS' : 60, # User time between feeds check (60s -> 1m)
+    'T_FEEDS' : 60, # Time between feeds check (60s -> 1m)
     'HTML_ANOYING_TAGS' : [ # HTML tags to remove from entries summary
         '<p>', '</p>', '<br>', '<br/>', '<br />', '</br>', '<hr>', '</hr>', '<pre>', '</pre>', \
         '<li>', '</li>', '<ul>', '</ul>', '<ol>', '</ol>', '<blockquote>', '</blockquote>', \
         '<h1>', '</h1>', '<h2>', '</h2>', '<h3>', '</h3>', '<code>', '</code>', '<em>', '</em>', \
         '<strong>', '</strong>', '<html>', '</html>', '<head>', '</head>', '<body>', '</body>', \
         '<script>', '</script>', '<img>', '</img>', '<div>', '</div>', '<input>', '</input>', \
-        '<span>', '</span>', '<form>', '</form>'
+        '<span>', '</span>', '<form>', '</form>', '&lt;', '&gt;'
     ],
     'HTML_ANOYING_STRUCTS' : [ # HTML structures to remove from entries summary
         '<img(.*?)>', '<div(.*?)>', '<pre(.*?)>', '<span(.*?)>', '<ol(.*?)>', '<ul(.*?)>', \
@@ -158,16 +158,16 @@ TEXT = {
         'ENA_NOT_SUBS' : \
             'There is no feeds subscriptions yet.',
 
-        'ENA_ENABLED' : \
+        'FR_ENABLED' : \
             'Feeds notifications enabled. Stop It with /disable command when you want.',
 
         'DIS_NOT_ENABLED' : \
             'I am already disabled.',
 
-        'DIS_DISABLED' : \
+        'FR_DISABLED' : \
             'Feeds notifications disabled. Start It with /enable command when you want.',
 
-        'FEEDREADER_ACTIVE' : \
+        'FR_ACTIVE' : \
             'The FeedReader is active, to use that command you need to disable it. Run the ' \
             'command /disable first.',
 
@@ -323,18 +323,18 @@ TEXT = {
         'ENA_NOT_SUBS' : \
             'Aun no hay ningun feed subscrito.',
 
-        'ENA_ENABLED' : \
+        'FR_ENABLED' : \
             'Notificaciones de los feeds activadas. Detenlas con el comando /disable cuando lo ' \
             'necesites.',
 
         'DIS_NOT_ENABLED' : \
             'Ya estoy desactivado.',
 
-        'DIS_DISABLED' : \
+        'FR_DISABLED' : \
             'Notificaciones de los feeds desactivadas. Ponlas nuevamente en funcionamiento con ' \
             'el comando /enable cuando necesites.',
 
-        'FEEDREADER_ACTIVE' : \
+        'FR_ACTIVE' : \
             'El lector de feeds esta activo, para usar este comando tienes que detenerlo. Envia ' \
             'el comando /disable primero.',
 
