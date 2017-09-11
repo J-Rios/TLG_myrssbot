@@ -9,9 +9,9 @@ Author:
 Creation date:
     23/08/2017
 Last modified date:
-    09/09/2017
+    11/09/2017
 Version:
-    1.1.0
+    1.2.0
 '''
 
 ####################################################################################################
@@ -19,8 +19,8 @@ Version:
 ### Constants ###
 CONST = {
     'DEVELOPER' : '@JoseTLG', # Developer Telegram contact
-    'DATE' : '09/09/2017', # Last modified date
-    'VERSION' : '1.1.0', # Actual version
+    'DATE' : '11/09/2017', # Last modified date
+    'VERSION' : '1.2.0', # Actual version
     'TOKEN' : 'XXXXXXXXX:XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', # Bot Token (get it from @BotFather)
     'REG_KEY' : 'registrationKey1234', # User registration Key (for signup and let use the Bot)
     'CHATS_DIR' : './data/chats', # Path of chats data directory
@@ -35,7 +35,7 @@ CONST = {
         '<h1>', '</h1>', '<h2>', '</h2>', '<h3>', '</h3>', '<code>', '</code>', '<em>', '</em>', \
         '<strong>', '</strong>', '<html>', '</html>', '<head>', '</head>', '<body>', '</body>', \
         '<script>', '</script>', '<img>', '</img>', '<div>', '</div>', '<input>', '</input>', \
-        '<span>', '</span>', '<form>', '</form>', '&lt;', '&gt;'
+        '<span>', '</span>', '<form>', '</form>', '<cite>', '</cite>', '&lt;', '&gt;'
     ],
     'HTML_ANOYING_STRUCTS' : [ # HTML structures to remove from entries summary
         '<img(.*?)>', '<div(.*?)>', '<pre(.*?)>', '<span(.*?)>', '<ol(.*?)>', '<ul(.*?)>', \

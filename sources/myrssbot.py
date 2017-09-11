@@ -9,9 +9,9 @@ Author:
 Creation date:
     23/08/2017
 Last modified date:
-    09/09/2017
+    11/09/2017
 Version:
-    1.1.0
+    1.2.0
 '''
 
 ####################################################################################################
@@ -49,13 +49,14 @@ threads = []
 lang = 'en'
 threads_lock = Lock()
 lang_lock = Lock()
+tlg_send_lock = Lock()
 
 ####################################################################################################
 
 ### Class for chats FeedReader threads ###
 class CchatFeed(Thread):
-    '''Threaded chat feed class to manage each chat feedparser'''
-    
+    '''Threaded chat feed class to manage each chat FeedReader (Feeds notification)'''
+
     def __init__(self, args):
         ''' Class constructor'''
         Thread.__init__(self)
@@ -63,7 +64,7 @@ class CchatFeed(Thread):
         self.lang = args[1]
         self.bot = args[2]
         self.end = False
-        self.lock = Lock()
+        self.lock_end = Lock()
 
 
     def get_id(self):
@@ -73,119 +74,37 @@ class CchatFeed(Thread):
 
     def finish(self):
         '''Set to finish the thread and stop it execution (called from TLG /disable command)'''
-        self.lock.acquire()
+        self.lock_end.acquire()
         self.end = True
-        self.lock.release()
+        self.lock_end.release()
 
 
-    def tlg_send_text(self, message):
-        '''Try to send a Telegram text message'''
-        sent = False
-        # Split the message if it is higher than the TLG message legth limit
-        messages = self.split_tlg_msgs(message)
-        for msg in messages:
-            # Try to send the message with HTML Parsing
-            try:
-                sent = True
-                self.bot.send_message(chat_id=self.chat_id, text=msg)
-            # Fail to send the telegram message. Print & write the error in Log file
-            except TimedOut:
-                pass
-            except TelegramError as error:
-                sent = False
-                logger.error('%s\n%s\n%s\n\n', error, TEXT[self.lang]['LINE'], msg)
-                print('{}\n{}\n{}\n\n'.format(error, TEXT[self.lang]['LINE'], msg))
-        return sent
+    def run(self):
+        '''thread method that run when the thread is launched (thread.start() is call)'''
+        # Notify that the FeedReader is enabled
+        self.tlg_send_text(TEXT[lang]['FR_ENABLED'])
+        # Initial values of variables
+        last_entries = []
+        actual_feeds = [{'Title': '', 'URL' : '', 'Entries' : []}]
+        # Read chat feeds from json file content and determine actual feeds
+        feeds = self.read_feeds()
+        actual_feeds = self.parse_feeds(feeds)
+        # Send the telegram initial feeds message/s
+        self.bot_send_feeds_init(actual_feeds)
+        # Get all the last entries in a single list
+        last_entries = self.get_entries(actual_feeds[:])
+        # While not "end" the thread (finish() method call from /disable TLG command)
+        while not self.end:
+            # Read chat feeds from json file content and determine actual feeds
+            feeds = self.read_feeds()
+            actual_feeds = self.parse_feeds(feeds)
+            # Send the telegram feeds message/s if any change was made in the feeds entries
+            self.bot_send_feeds_changes(actual_feeds, last_entries)
+            # Update last entries
+            last_entries = self.get_entries(actual_feeds[:])
+            sleep(CONST['T_FEEDS'])
 
-
-    def tlg_send_html(self, message):
-        '''Try to send a Telegram message with HTML content'''
-        sent = False
-        # Split the message if it is higher than the TLG message legth limit
-        messages = self.split_tlg_msgs(message)
-        for msg in messages:
-            # Try to send the message with HTML Parsing
-            try:
-                sent = True
-                self.bot.send_message(chat_id=self.chat_id, text=msg, parse_mode=ParseMode.HTML)
-            # Fail to parse HTML and send telegram message. Print & write the error in Log file
-            except TimedOut:
-                pass
-            except TelegramError as error:
-                sent = False
-                logger.error('%s\n%s\n%s\n\n', error, TEXT[self.lang]['LINE'], msg)
-                print('{}\n{}\n{}\n\n'.format(error, TEXT[self.lang]['LINE'], msg))
-            # If send fail
-            if not sent:
-                # Add an end tag character (>) and try to send the message again
-                msg = '{}>'.format(msg)
-                try:
-                    sent = True
-                    self.bot.send_message(chat_id=self.chat_id, text=msg, parse_mode=ParseMode.HTML)
-                # Fail to parse HTML and send telegram message. Print & write the error in Log file
-                except TimedOut:
-                    pass
-                except TelegramError as error:
-                    sent = False
-                    logger.error('%s\n%s\n%s\n\n', error, TEXT[self.lang]['LINE'], msg)
-                    print('{}\n{}\n{}\n\n'.format(error, TEXT[self.lang]['LINE'], msg))
-        return sent
-
-
-    def split_tlg_msgs(self, text_in):
-        '''Function for split a text in fragments of telegram allowed length message'''
-        text_out = []
-        num_char = len(text_in)
-        # Just one fragment if the length of the msg is less than max chars allowed per TLG message
-        if num_char <= CONST['TLG_MSG_MAX_CHARS']:
-            text_out.append(text_in)
-        # Split the text in fragments if the length is higher than max chars allowed by TLG message
-        else:
-            # Determine the number of msgs to send and add 1 more msg if it is not an integer number
-            num_msgs = num_char/float(CONST['TLG_MSG_MAX_CHARS'])
-            if isinstance(num_msgs, int) != True:
-                num_msgs = int(num_msgs) + 1
-            fragment = 0
-            # Create the output fragments list of messages
-            for _ in range(0, num_msgs, 1):
-                text_out.append(text_in[fragment:fragment+CONST['TLG_MSG_MAX_CHARS']])
-                fragment = fragment + CONST['TLG_MSG_MAX_CHARS']
-        # Return the result text/list-of-fragments
-        return text_out
-
-
-    def remove_complex_html(self, pattern, html_text):
-        ''' Remove complex anoying HTML structures'''
-        output = html_text
-        # Create the pattern element and search for it in the text
-        _pattern = re.compile(pattern)
-        result = _pattern.search(output)
-        # If there is a search result (pattern found)
-        if result:
-            # Get the to-delete substring and replace it to empty in the original text
-            to_del = result.group(0)
-            output = output.replace(to_del, '')
-            # Try to do it again (recursively, maybe there is more same structures in the text)
-            output = self.remove_complex_html(pattern, output)
-        # If there is no search result for that pattern, return the modify text
-        return output
-
-
-    def html_fix_tlg(self, summary):
-        '''Remove all anoying HTML tags from entries summary'''
-        # Put the input into output
-        output = summary
-        # Remove every HTML tag
-        for tag in CONST['HTML_ANOYING_TAGS']:
-            if tag == '<br>' or tag == '<br />':
-                output = output.replace(tag, '\n')
-            else:
-                output = output.replace(tag, '')
-            # Remove every HTML more complex structures (i.e. <img> to <img(.*?)>)
-            tag_struct = '{}{}{}'.format(tag[:len(tag)-1], '(.*?)', tag[len(tag)-1:])
-            output = self.remove_complex_html(tag_struct, output)
-        return output
-
+    ##################################################
 
     def read_feeds(self):
         '''Read chat feeds from json file content'''
@@ -194,21 +113,13 @@ class CchatFeed(Thread):
         return chat_feeds[0]['Feeds']
 
 
-    def valid_feed(self, feed_parsed):
-        '''Check if the given feed is valid (has title and link keys)'''
-        valid = False
-        if ('title' in feed_parsed['feed']) and ('link' in feed_parsed['feed']):
-            valid = True
-        return valid
-
-
-    def valid_entry(self, entry):
-        '''Check if the given entry is valid (has title, published, summary and link keys)'''
-        valid = False
-        if ('title' in entry) and ('published' in entry):
-            if ('summary' in entry) and ('link' in entry):
-                valid = True
-        return valid
+    def get_entries(self, feeds):
+        '''Extract in a single list all entries title of feeds element'''
+        all_entries = []
+        for feed in feeds:
+            for entries in feed['Entries']:
+                all_entries.append(entries)
+        return all_entries
 
 
     def parse_feeds(self, feeds):
@@ -248,15 +159,6 @@ class CchatFeed(Thread):
                 # Add feed data to actual feeds variable
                 actual_feeds.append(feed_to_add)
         return actual_feeds
-
-
-    def get_entries(self, feeds):
-        '''Extract in a single list all entries title of feeds element'''
-        all_entries = []
-        for feed in feeds:
-            for entries in feed['Entries']:
-                all_entries.append(entries)
-        return all_entries
 
 
     def bot_send_feeds_init(self, feeds):
@@ -308,34 +210,145 @@ class CchatFeed(Thread):
                         sent = self.tlg_send_html(bot_msg)
                         if not sent:
                             self.tlg_send_text(bot_msg)
-                        if num_sent % 5:
-                            sleep(1)
+
+    ##################################################
+
+    def valid_feed(self, feed_parsed):
+        '''Check if the given feed is valid (has title and link keys)'''
+        valid = False
+        if ('title' in feed_parsed['feed']) and ('link' in feed_parsed['feed']):
+            valid = True
+        return valid
 
 
-    def run(self):
-        '''thread method that run when the thread is launched (thread.start() is call)'''
-        # Notify that the FeedReader is enabled
-        self.tlg_send_text(TEXT[lang]['FR_ENABLED'])
-        # Initial values of variables
-        last_entries = []
-        actual_feeds = [{'Title': '', 'URL' : '', 'Entries' : []}]
-        # Read chat feeds from json file content and determine actual feeds
-        feeds = self.read_feeds()
-        actual_feeds = self.parse_feeds(feeds)
-        # Send the telegram initial feeds message/s
-        self.bot_send_feeds_init(actual_feeds)
-        # Get all the last entries in a single list
-        last_entries = self.get_entries(actual_feeds[:])
-        # While not "end" the thread (finish() method call from /disable TLG command)
-        while not self.end:
-            # Read chat feeds from json file content and determine actual feeds
-            feeds = self.read_feeds()
-            actual_feeds = self.parse_feeds(feeds)
-            # Send the telegram feeds message/s if any change was made in the feeds entries
-            self.bot_send_feeds_changes(actual_feeds, last_entries)
-            # Update last entries
-            last_entries = self.get_entries(actual_feeds[:])
-            sleep(CONST['T_FEEDS'])
+    def valid_entry(self, entry):
+        '''Check if the given entry is valid (has title, published, summary and link keys)'''
+        valid = False
+        if ('title' in entry) and ('published' in entry):
+            if ('summary' in entry) and ('link' in entry):
+                valid = True
+        return valid
+
+
+    def html_fix_tlg(self, summary):
+        '''Remove all anoying HTML tags from entries summary'''
+        # Put the input into output
+        output = summary
+        # Remove every HTML tag
+        for tag in CONST['HTML_ANOYING_TAGS']:
+            if tag == '<br>' or tag == '<br />':
+                output = output.replace(tag, '\n')
+            else:
+                output = output.replace(tag, '')
+            # Remove every HTML more complex structures (i.e. <img> to <img(.*?)>)
+            tag_struct = '{}{}{}'.format(tag[:len(tag)-1], '(.*?)', tag[len(tag)-1:])
+            output = self.remove_complex_html(tag_struct, output)
+        return output
+
+
+    def remove_complex_html(self, pattern, html_text):
+        ''' Remove complex anoying HTML structures'''
+        output = html_text
+        # Create the pattern element and search for it in the text
+        _pattern = re.compile(pattern)
+        result = _pattern.search(output)
+        # If there is a search result (pattern found)
+        if result:
+            # Get the to-delete substring and replace it to empty in the original text
+            to_del = result.group(0)
+            output = output.replace(to_del, '')
+            # Try to do it again (recursively, maybe there is more same structures in the text)
+            output = self.remove_complex_html(pattern, output)
+        # If there is no search result for that pattern, return the modify text
+        return output
+
+
+    def tlg_send_text(self, message):
+        '''Try to send a Telegram text message'''
+        sent = False
+        # Split the message if it is higher than the TLG message legth limit
+        messages = self.split_tlg_msgs(message)
+        for msg in messages:
+            # Try to send the message with HTML Parsing
+            tlg_send_lock.acquire()
+            try:
+                sent = True
+                self.bot.send_message(chat_id=self.chat_id, text=msg)
+            # Fail to send the telegram message. Print & write the error in Log file
+            except TimedOut:
+                pass
+            except TelegramError as error:
+                sent = False
+                logger.error('%s\n%s\n%s\n\n', error, TEXT[self.lang]['LINE'], msg)
+                print('{}\n{}\n{}\n\n'.format(error, TEXT[self.lang]['LINE'], msg))
+            finally:
+                sleep(1)
+                tlg_send_lock.release()
+        return sent
+
+
+    def tlg_send_html(self, message):
+        '''Try to send a Telegram message with HTML content'''
+        sent = False
+        # Split the message if it is higher than the TLG message legth limit
+        messages = self.split_tlg_msgs(message)
+        for msg in messages:
+            # Try to send the message with HTML Parsing
+            tlg_send_lock.acquire()
+            try:
+                sent = True
+                self.bot.send_message(chat_id=self.chat_id, text=msg, parse_mode=ParseMode.HTML)
+            # Fail to parse HTML and send telegram message. Print & write the error in Log file
+            except TimedOut:
+                pass
+            except TelegramError as error:
+                sent = False
+                logger.error('%s\n%s\n%s\n\n', error, TEXT[self.lang]['LINE'], msg)
+                print('{}\n{}\n{}\n\n'.format(error, TEXT[self.lang]['LINE'], msg))
+            finally:
+                sleep(0.5)
+                tlg_send_lock.release()
+            # If send fail
+            if not sent:
+                # Add an end tag character (>) and try to send the message again
+                msg = '{}>'.format(msg)
+                tlg_send_lock.acquire()
+                try:
+                    sent = True
+                    self.bot.send_message(chat_id=self.chat_id, text=msg, parse_mode=ParseMode.HTML)
+                # Fail to parse HTML and send telegram message. Print & write the error in Log file
+                except TimedOut:
+                    pass
+                except TelegramError as error:
+                    sent = False
+                    logger.error('%s\n%s\n%s\n\n', error, TEXT[self.lang]['LINE'], msg)
+                    print('{}\n{}\n{}\n\n'.format(error, TEXT[self.lang]['LINE'], msg))
+                finally:
+                    sleep(0.5)
+                    tlg_send_lock.release()
+        return sent
+
+
+    def split_tlg_msgs(self, text_in):
+        '''Function for split a text in fragments of telegram allowed length message'''
+        text_out = []
+        num_char = len(text_in)
+        # Just one fragment if the length of the msg is less than max chars allowed per TLG message
+        if num_char <= CONST['TLG_MSG_MAX_CHARS']:
+            text_out.append(text_in)
+        # Split the text in fragments if the length is higher than max chars allowed by TLG message
+        else:
+            # Determine the number of msgs to send and add 1 more msg if it is not an integer number
+            num_msgs = num_char/float(CONST['TLG_MSG_MAX_CHARS'])
+            if isinstance(num_msgs, int) != True:
+                num_msgs = int(num_msgs) + 1
+            fragment = 0
+            # Create the output fragments list of messages
+            for _ in range(0, num_msgs, 1):
+                text_out.append(text_in[fragment:fragment+CONST['TLG_MSG_MAX_CHARS']])
+                fragment = fragment + CONST['TLG_MSG_MAX_CHARS']
+        # Return the result text/list-of-fragments
+        return text_out
 
 ####################################################################################################
 
