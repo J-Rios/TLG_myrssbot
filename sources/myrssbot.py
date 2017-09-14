@@ -11,7 +11,7 @@ Creation date:
 Last modified date:
     14/09/2017
 Version:
-    1.3.0
+    1.3.1
 '''
 
 ####################################################################################################
@@ -64,7 +64,6 @@ class CchatFeed(Thread):
         self.lang = args[1]
         self.bot = args[2]
         self.end = False
-        self.num_sent = 0
         self.lock_end = Lock()
 
 
@@ -107,7 +106,7 @@ class CchatFeed(Thread):
             last_entries = self.get_entries(actual_feeds[:])
             # If the elapsed time in Feeds notifications is less than CONST['T_FEEDS'] minute, wait
             time_elapsed = time() - init_time
-            if time_elapsed < CONST['T_FEEDS']:
+            if (time_elapsed < CONST['T_FEEDS']) and (not self.end):
                 sleep(CONST['T_FEEDS'] - time_elapsed + 1)
 
     ##################################################
@@ -123,8 +122,8 @@ class CchatFeed(Thread):
         '''Extract in a single list all entries title of feeds element'''
         all_entries = []
         for feed in feeds:
-            for entries in feed['Entries']:
-                all_entries.append(entries)
+            for entry in feed['Entries']:
+                all_entries.append(entry)
         return all_entries
 
 
@@ -209,6 +208,8 @@ class CchatFeed(Thread):
                         sent = self.tlg_send_html(bot_msg)
                         if not sent:
                             self.tlg_send_text(bot_msg)
+                    if self.end:
+                        break
 
     ##################################################
 
@@ -272,7 +273,6 @@ class CchatFeed(Thread):
             tlg_send_lock.acquire()
             try:
                 sent = True
-                self.num_sent = self.num_sent + 1
                 self.bot.send_message(chat_id=self.chat_id, text=msg)
             # Fail to send the telegram message. Print & write the error in Log file
             except TimedOut:
@@ -301,7 +301,6 @@ class CchatFeed(Thread):
             tlg_send_lock.acquire()
             try:
                 sent = True
-                self.num_sent = self.num_sent + 1
                 self.bot.send_message(chat_id=self.chat_id, text=msg, parse_mode=ParseMode.HTML)
             # Fail to parse HTML and send telegram message. Print & write the error in Log file
             except TimedOut:
@@ -324,7 +323,6 @@ class CchatFeed(Thread):
                 tlg_send_lock.acquire()
                 try:
                     sent = True
-                    self.num_sent = self.num_sent + 1
                     self.bot.send_message(chat_id=self.chat_id, text=msg, parse_mode=ParseMode.HTML)
                 # Fail to parse HTML and send telegram message. Print & write the error in Log file
                 except TimedOut:
