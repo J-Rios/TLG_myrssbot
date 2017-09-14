@@ -9,9 +9,9 @@ Author:
 Creation date:
     23/08/2017
 Last modified date:
-    11/09/2017
+    14/09/2017
 Version:
-    1.2.0
+    1.3.0
 '''
 
 ####################################################################################################
@@ -20,7 +20,7 @@ Version:
 import re
 import logging
 from os import path
-from time import sleep
+from time import sleep, time
 from threading import Thread, Lock
 from collections import OrderedDict
 from feedparser import parse
@@ -64,6 +64,7 @@ class CchatFeed(Thread):
         self.lang = args[1]
         self.bot = args[2]
         self.end = False
+        self.num_sent = 0
         self.lock_end = Lock()
 
 
@@ -82,7 +83,7 @@ class CchatFeed(Thread):
     def run(self):
         '''thread method that run when the thread is launched (thread.start() is call)'''
         # Notify that the FeedReader is enabled
-        self.tlg_send_text(TEXT[lang]['FR_ENABLED'])
+        self.tlg_send_text(TEXT[lang]['FR_ENABLED'], flood_control=False)
         # Initial values of variables
         last_entries = []
         actual_feeds = [{'Title': '', 'URL' : '', 'Entries' : []}]
@@ -95,6 +96,8 @@ class CchatFeed(Thread):
         last_entries = self.get_entries(actual_feeds[:])
         # While not "end" the thread (finish() method call from /disable TLG command)
         while not self.end:
+            # Get the actual time (seconds since epoch)
+            init_time = time()
             # Read chat feeds from json file content and determine actual feeds
             feeds = self.read_feeds()
             actual_feeds = self.parse_feeds(feeds)
@@ -102,7 +105,10 @@ class CchatFeed(Thread):
             self.bot_send_feeds_changes(actual_feeds, last_entries)
             # Update last entries
             last_entries = self.get_entries(actual_feeds[:])
-            sleep(CONST['T_FEEDS'])
+            # If the elapsed time in Feeds notifications is less than CONST['T_FEEDS'] minute, wait
+            time_elapsed = time() - init_time
+            if time_elapsed < CONST['T_FEEDS']:
+                sleep(CONST['T_FEEDS'] - time_elapsed + 1)
 
     ##################################################
 
@@ -134,10 +140,7 @@ class CchatFeed(Thread):
                 feed_to_add['Title'] = feedparse['feed']['title']
                 feed_to_add['URL'] = feedparse['feed']['link']
                 # Determine number of entries to show
-                if len(feedparse['entries']) >= CONST['NUM_SHOW_ENTRIES']:
-                    entries_to_show = CONST['NUM_SHOW_ENTRIES']
-                else:
-                    entries_to_show = len(feedparse['entries'])
+                entries_to_show = len(feedparse['entries'])
                 # If there is any entry
                 if entries_to_show:
                     # For entries to show, get entry data
@@ -176,26 +179,23 @@ class CchatFeed(Thread):
                             feed_titl, TEXT[self.lang]['LINE'], entry_titl, \
                             last_entry['Published'], last_entry['Summary'])
                     # Send the message
-                    sent = self.tlg_send_html(bot_msg)
+                    sent = self.tlg_send_html(bot_msg, flood_control=False)
                     if not sent:
-                        self.tlg_send_text(bot_msg)
+                        self.tlg_send_text(bot_msg, flood_control=False)
                 else:
                     # Send a message to tell that this feed does not have any entry
                     feed_titl = '<a href="{}">{}</a>'.format(feed['URL'], feed['Title'])
                     bot_msg = '<b>Feed:</b>\n{}{}\n{}'.format(feed_titl, TEXT[self.lang]['LINE'], \
                             TEXT[self.lang]['NO_ENTRIES'])
-                    sent = self.tlg_send_html(bot_msg)
+                    sent = self.tlg_send_html(bot_msg, flood_control=False)
                     if not sent:
-                        self.tlg_send_text(bot_msg)
-                # Delay between messages
-                sleep(0.8)
+                        self.tlg_send_text(bot_msg, flood_control=False)
 
 
     def bot_send_feeds_changes(self, actual_feeds, last_entries):
         '''Checks and send telegram feeds message/s if any change was made in the feeds entries'''
         for feed in actual_feeds:
             if feed['Entries']:
-                num_sent = 0
                 for entry in feed['Entries']:
                     # If there is not an entry with that title in last_entries
                     _d = {}
@@ -203,9 +203,8 @@ class CchatFeed(Thread):
                         # Send the telegram message/s
                         feed_titl = '<a href="{}">{}</a>'.format(feed['URL'], feed['Title'])
                         entry_titl = '<a href="{}">{}</a>'.format(entry['URL'], entry['Title'])
-                        bot_msg = '{}{}{}\n{}\n\n{}'.format(feed_titl, \
-                                TEXT[self.lang]['LINE'], entry_titl, entry['Published'], \
-                                entry['Summary'])
+                        bot_msg = '{}{}{}\n{}\n\n{}'.format(feed_titl, TEXT[self.lang]['LINE'], \
+                                entry_titl, entry['Published'], entry['Summary'])
                         # Send the message
                         sent = self.tlg_send_html(bot_msg)
                         if not sent:
@@ -263,7 +262,7 @@ class CchatFeed(Thread):
         return output
 
 
-    def tlg_send_text(self, message):
+    def tlg_send_text(self, message, flood_control=True):
         '''Try to send a Telegram text message'''
         sent = False
         # Split the message if it is higher than the TLG message legth limit
@@ -273,6 +272,7 @@ class CchatFeed(Thread):
             tlg_send_lock.acquire()
             try:
                 sent = True
+                self.num_sent = self.num_sent + 1
                 self.bot.send_message(chat_id=self.chat_id, text=msg)
             # Fail to send the telegram message. Print & write the error in Log file
             except TimedOut:
@@ -282,12 +282,16 @@ class CchatFeed(Thread):
                 logger.error('%s\n%s\n%s\n\n', error, TEXT[self.lang]['LINE'], msg)
                 print('{}\n{}\n{}\n\n'.format(error, TEXT[self.lang]['LINE'], msg))
             finally:
+                # Wait 1s and release the lock. Prevent anti-flood (max 30 msg/s in all chats)
                 sleep(1)
                 tlg_send_lock.release()
+                # Wait 5s. Prevent anti-flood system (max 20 msg/min in same chat)
+                if flood_control:
+                    sleep(12)
         return sent
 
 
-    def tlg_send_html(self, message):
+    def tlg_send_html(self, message, flood_control=True):
         '''Try to send a Telegram message with HTML content'''
         sent = False
         # Split the message if it is higher than the TLG message legth limit
@@ -297,6 +301,7 @@ class CchatFeed(Thread):
             tlg_send_lock.acquire()
             try:
                 sent = True
+                self.num_sent = self.num_sent + 1
                 self.bot.send_message(chat_id=self.chat_id, text=msg, parse_mode=ParseMode.HTML)
             # Fail to parse HTML and send telegram message. Print & write the error in Log file
             except TimedOut:
@@ -306,8 +311,12 @@ class CchatFeed(Thread):
                 logger.error('%s\n%s\n%s\n\n', error, TEXT[self.lang]['LINE'], msg)
                 print('{}\n{}\n{}\n\n'.format(error, TEXT[self.lang]['LINE'], msg))
             finally:
-                sleep(0.5)
+                # Wait 1s and release the lock. Prevent anti-flood (max 30 msg/s in all chats)
+                sleep(1)
                 tlg_send_lock.release()
+                # Wait 5s. Prevent anti-flood system (max 20 msg/min in same chat)
+                if flood_control:
+                    sleep(12)
             # If send fail
             if not sent:
                 # Add an end tag character (>) and try to send the message again
@@ -315,6 +324,7 @@ class CchatFeed(Thread):
                 tlg_send_lock.acquire()
                 try:
                     sent = True
+                    self.num_sent = self.num_sent + 1
                     self.bot.send_message(chat_id=self.chat_id, text=msg, parse_mode=ParseMode.HTML)
                 # Fail to parse HTML and send telegram message. Print & write the error in Log file
                 except TimedOut:
@@ -324,8 +334,12 @@ class CchatFeed(Thread):
                     logger.error('%s\n%s\n%s\n\n', error, TEXT[self.lang]['LINE'], msg)
                     print('{}\n{}\n{}\n\n'.format(error, TEXT[self.lang]['LINE'], msg))
                 finally:
-                    sleep(0.5)
+                    # Wait 1s and release the lock. Prevent anti-flood (max 30 msg/s in all chats)
+                    sleep(1)
                     tlg_send_lock.release()
+                    # Wait 5s. Prevent anti-flood system (max 20 msg/min in same chat)
+                    if flood_control:
+                        sleep(12)
         return sent
 
 

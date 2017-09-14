@@ -9,9 +9,9 @@ Author:
 Creation date:
     23/08/2017
 Last modified date:
-    11/09/2017
+    14/09/2017
 Version:
-    1.2.0
+    1.3.0
 '''
 
 ####################################################################################################
@@ -19,15 +19,14 @@ Version:
 ### Constants ###
 CONST = {
     'DEVELOPER' : '@JoseTLG', # Developer Telegram contact
-    'DATE' : '11/09/2017', # Last modified date
-    'VERSION' : '1.2.0', # Actual version
+    'DATE' : '14/09/2017', # Last modified date
+    'VERSION' : '1.3.0', # Actual version
     'TOKEN' : 'XXXXXXXXX:XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', # Bot Token (get it from @BotFather)
     'REG_KEY' : 'registrationKey1234', # User registration Key (for signup and let use the Bot)
     'CHATS_DIR' : './data/chats', # Path of chats data directory
     'USERS_LIST_FILE' : './data/users_list.json', # Json file of signed-up users list
     'TLG_MSG_MAX_CHARS' : 4095, # Max number of characters per message allowed by Telegram
     'MAX_ENTRY_SUMMARY' : 2500, # Max number of characters in entry summary (description)
-    'NUM_SHOW_ENTRIES' : 5, # Number of max entries to monitorize and show
     'T_FEEDS' : 60, # Time between feeds check (60s -> 1m)
     'HTML_ANOYING_TAGS' : [ # HTML tags to remove from entries summary
         '<p>', '</p>', '<br>', '<br/>', '<br />', '</br>', '<hr>', '</hr>', '<pre>', '</pre>', \
