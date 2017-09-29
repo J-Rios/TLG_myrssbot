@@ -9,9 +9,9 @@ Author:
 Creation date:
     23/08/2017
 Last modified date:
-    14/09/2017
+    29/09/2017
 Version:
-    1.3.1
+    1.4.0
 '''
 
 ####################################################################################################
@@ -85,7 +85,7 @@ class CchatFeed(Thread):
         self.tlg_send_text(TEXT[lang]['FR_ENABLED'], flood_control=False)
         # Initial values of variables
         last_entries = []
-        actual_feeds = [{'Title': '', 'URL' : '', 'Entries' : []}]
+        actual_feeds = []
         # Read chat feeds from json file content and determine actual feeds
         feeds = self.read_feeds()
         actual_feeds = self.parse_feeds(feeds)
@@ -101,13 +101,21 @@ class CchatFeed(Thread):
             feeds = self.read_feeds()
             actual_feeds = self.parse_feeds(feeds)
             # Send the telegram feeds message/s if any change was made in the feeds entries
-            self.bot_send_feeds_changes(actual_feeds, last_entries)
+            change = self.bot_send_feeds_changes(actual_feeds, last_entries)
             # Update last entries
-            last_entries = self.get_entries(actual_feeds[:])
+            if change:
+                last_entries.clear()
+                last_entries = self.get_entries(actual_feeds[:])
             # If the elapsed time in Feeds notifications is less than CONST['T_FEEDS'] minute, wait
             time_elapsed = time() - init_time
             if (time_elapsed < CONST['T_FEEDS']) and (not self.end):
-                sleep(CONST['T_FEEDS'] - time_elapsed + 1)
+                # Spread wait in 1-second sleeps for manage fast thread end (/disable cmd received)
+                for _ in range(0, int(CONST['T_FEEDS'] - time_elapsed) + 1):
+                    sleep(1)
+                    if self.end:
+                        break
+        # Notify that the FeedReader is disabled
+        self.tlg_send_text(TEXT[lang]['FR_DISABLED'], flood_control=False)
 
     ##################################################
 
@@ -147,7 +155,8 @@ class CchatFeed(Thread):
                         if self.valid_entry(feedparse['entries'][i]):
                             entry = {'Title': '', 'Published' : '', 'Summary' : '', 'URL' : ''}
                             entry['Title'] = feedparse['entries'][i]['title']
-                            entry['Published'] = feedparse['entries'][i]['published']
+                            if 'published' in feedparse['entries'][i]:
+                                entry['Published'] = feedparse['entries'][i]['published']
                             entry['Summary'] = feedparse['entries'][i]['summary']
                             entry['URL'] = feedparse['entries'][i]['link']
                             # Fix summary text to be allowed by telegram
@@ -193,12 +202,12 @@ class CchatFeed(Thread):
 
     def bot_send_feeds_changes(self, actual_feeds, last_entries):
         '''Checks and send telegram feeds message/s if any change was made in the feeds entries'''
+        change = False
         for feed in actual_feeds:
             if feed['Entries']:
                 for entry in feed['Entries']:
                     # If there is not an entry with that title in last_entries
-                    _d = {}
-                    if not any(_d.get('Title', None) == entry['Title'] for _d in last_entries):
+                    if not self.entry_in_last(entry, last_entries):
                         # Send the telegram message/s
                         feed_titl = '<a href="{}">{}</a>'.format(feed['URL'], feed['Title'])
                         entry_titl = '<a href="{}">{}</a>'.format(entry['URL'], entry['Title'])
@@ -207,9 +216,14 @@ class CchatFeed(Thread):
                         # Send the message
                         sent = self.tlg_send_html(bot_msg)
                         if not sent:
-                            self.tlg_send_text(bot_msg)
+                            sent = self.tlg_send_text(bot_msg)
+                        if sent:
+                            change = True
                     if self.end:
                         break
+                if self.end:
+                    break
+        return change
 
     ##################################################
 
@@ -224,10 +238,17 @@ class CchatFeed(Thread):
     def valid_entry(self, entry):
         '''Check if the given entry is valid (has title, published, summary and link keys)'''
         valid = False
-        if ('title' in entry) and ('published' in entry):
-            if ('summary' in entry) and ('link' in entry):
-                valid = True
+        if ('title' in entry) and ('summary' in entry) and ('link' in entry):
+            valid = True
         return valid
+
+    def entry_in_last(self, entry, last_entries):
+        '''Check if an entry is in the last_entries list'''
+        for l_entry in last_entries:
+            if entry['Title'] == l_entry['Title']:
+                if entry['URL'] == l_entry['URL']:
+                    if entry['Summary'] == l_entry['Summary']:
+                        return True
 
 
     def html_fix_tlg(self, summary):
@@ -285,9 +306,12 @@ class CchatFeed(Thread):
                 # Wait 1s and release the lock. Prevent anti-flood (max 30 msg/s in all chats)
                 sleep(1)
                 tlg_send_lock.release()
-                # Wait 5s. Prevent anti-flood system (max 20 msg/min in same chat)
+                # Wait 12s. Prevent anti-flood system (max 20 msg/min in same chat)
                 if flood_control:
                     sleep(12)
+            # If the sent fail, break
+            if not sent:
+                break
         return sent
 
 
@@ -313,7 +337,7 @@ class CchatFeed(Thread):
                 # Wait 1s and release the lock. Prevent anti-flood (max 30 msg/s in all chats)
                 sleep(1)
                 tlg_send_lock.release()
-                # Wait 5s. Prevent anti-flood system (max 20 msg/min in same chat)
+                # Wait 12s. Prevent anti-flood system (max 20 msg/min in same chat)
                 if flood_control:
                     sleep(12)
             # If send fail
@@ -335,9 +359,12 @@ class CchatFeed(Thread):
                     # Wait 1s and release the lock. Prevent anti-flood (max 30 msg/s in all chats)
                     sleep(1)
                     tlg_send_lock.release()
-                    # Wait 5s. Prevent anti-flood system (max 20 msg/min in same chat)
+                    # Wait 12s. Prevent anti-flood system (max 20 msg/min in same chat)
                     if flood_control:
                         sleep(12)
+            # If the sent fail, break
+            if not sent:
+                break
         return sent
 
 
@@ -702,7 +729,6 @@ def cmd_disable(bot, update):
                     thr_feed.finish() # Finish the thread
                     threads.remove(thr_feed) # Remove actual thread from the active threads variable
                     removed = True
-                    bot.send_message(chat_id=chat_id, text=TEXT[lang]['FR_DISABLED']) # Bot reply
         threads_lock.release() # Release the active threads variable lock
     else: # The user is not signed-up
         bot.send_message(chat_id=chat_id, text=TEXT[lang]['CMD_NOT_ALLOW']) # Bot reply
