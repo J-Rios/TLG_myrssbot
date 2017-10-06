@@ -9,9 +9,9 @@ Author:
 Creation date:
     23/08/2017
 Last modified date:
-    29/09/2017
+    06/10/2017
 Version:
-    1.4.0
+    1.5.0
 '''
 
 ####################################################################################################
@@ -20,6 +20,7 @@ Version:
 import re
 import logging
 from os import path
+from copy import copy
 from time import sleep, time
 from threading import Thread, Lock
 from collections import OrderedDict
@@ -40,7 +41,7 @@ hdlr = logging.FileHandler('log.log')
 formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
 hdlr.setFormatter(formatter)
 logger.addHandler(hdlr)
-logger.setLevel(logging.WARNING)
+logger.setLevel(logging.DEBUG)
 
 ####################################################################################################
 
@@ -79,8 +80,17 @@ class CchatFeed(Thread):
         self.lock_end.release()
 
 
+    def must_finish(self):
+        '''Get the finish status of the thread'''
+        self.lock_end.acquire()
+        end_thread = copy(self.end)
+        self.lock_end.release()
+        return end_thread
+
     def run(self):
         '''thread method that run when the thread is launched (thread.start() is call)'''
+        # Logging info
+        logger.info('- [%s] enabled and running.', self.name)
         # Notify that the FeedReader is enabled
         self.tlg_send_text(TEXT[lang]['FR_ENABLED'], flood_control=False)
         # Initial values of variables
@@ -93,8 +103,10 @@ class CchatFeed(Thread):
         self.bot_send_feeds_init(actual_feeds)
         # Get all the last entries in a single list
         last_entries = self.get_entries(actual_feeds[:])
+        # Get the thread end status
+        end_thread = self.must_finish()
         # While not "end" the thread (finish() method call from /disable TLG command)
-        while not self.end:
+        while not end_thread:
             # Get the actual time (seconds since epoch)
             init_time = time()
             # Read chat feeds from json file content and determine actual feeds
@@ -112,10 +124,16 @@ class CchatFeed(Thread):
                 # Spread wait in 1-second sleeps for manage fast thread end (/disable cmd received)
                 for _ in range(0, int(CONST['T_FEEDS'] - time_elapsed) + 1):
                     sleep(1)
-                    if self.end:
+                    # Get the thread end status and break if needed
+                    end_thread = self.must_finish()
+                    if end_thread:
                         break
+            # Get the thread end status
+            end_thread = self.must_finish()
         # Notify that the FeedReader is disabled
         self.tlg_send_text(TEXT[lang]['FR_DISABLED'], flood_control=False)
+        # Logging info
+        logger.info('- [%s] disabled and stoped.', self.name)
 
     ##################################################
 
@@ -213,6 +231,11 @@ class CchatFeed(Thread):
                         entry_titl = '<a href="{}">{}</a>'.format(entry['URL'], entry['Title'])
                         bot_msg = '{}{}{}\n{}\n\n{}'.format(feed_titl, TEXT[self.lang]['LINE'], \
                                 entry_titl, entry['Published'], entry['Summary'])
+                        # Debug
+                        logger.info('- [%s] New entry:\n%s\n%s\n%s\n%s\n\n', self.name, \
+                                entry['Title'], entry['URL'], entry['Published'], entry['Summary'])
+                        print('[{}] New entry:\n{}\n{}\n{}\n{}\n'.format(self.name, \
+                                entry['Title'], entry['URL'], entry['Published'], entry['Summary']))
                         # Send the message
                         sent = self.tlg_send_html(bot_msg)
                         if not sent:
@@ -242,13 +265,15 @@ class CchatFeed(Thread):
             valid = True
         return valid
 
+
     def entry_in_last(self, entry, last_entries):
         '''Check if an entry is in the last_entries list'''
+        # For each entry in lat entries, check if there is any with the same title and url
         for l_entry in last_entries:
             if entry['Title'] == l_entry['Title']:
                 if entry['URL'] == l_entry['URL']:
-                    if entry['Summary'] == l_entry['Summary']:
-                        return True
+                    #if entry['Summary'] == l_entry['Summary']:
+                    return True
 
 
     def html_fix_tlg(self, summary):
@@ -300,8 +325,8 @@ class CchatFeed(Thread):
                 pass
             except TelegramError as error:
                 sent = False
-                logger.error('%s\n%s\n%s\n\n', error, TEXT[self.lang]['LINE'], msg)
-                print('{}\n{}\n{}\n\n'.format(error, TEXT[self.lang]['LINE'], msg))
+                logger.error('- %s\n%s\n%s\n\n', error, TEXT[self.lang]['LINE'], msg)
+                print('{}\n{}\n{}\n'.format(error, TEXT[self.lang]['LINE'], msg))
             finally:
                 # Wait 1s and release the lock. Prevent anti-flood (max 30 msg/s in all chats)
                 sleep(1)
@@ -331,8 +356,8 @@ class CchatFeed(Thread):
                 pass
             except TelegramError as error:
                 sent = False
-                logger.error('%s\n%s\n%s\n\n', error, TEXT[self.lang]['LINE'], msg)
-                print('{}\n{}\n{}\n\n'.format(error, TEXT[self.lang]['LINE'], msg))
+                logger.error('- %s\n%s\n%s\n\n', error, TEXT[self.lang]['LINE'], msg)
+                print('{}\n{}\n{}\n'.format(error, TEXT[self.lang]['LINE'], msg))
             finally:
                 # Wait 1s and release the lock. Prevent anti-flood (max 30 msg/s in all chats)
                 sleep(1)
@@ -353,8 +378,8 @@ class CchatFeed(Thread):
                     pass
                 except TelegramError as error:
                     sent = False
-                    logger.error('%s\n%s\n%s\n\n', error, TEXT[self.lang]['LINE'], msg)
-                    print('{}\n{}\n{}\n\n'.format(error, TEXT[self.lang]['LINE'], msg))
+                    logger.error('- %s\n%s\n%s\n\n', error, TEXT[self.lang]['LINE'], msg)
+                    print('{}\n{}\n{}\n'.format(error, TEXT[self.lang]['LINE'], msg))
                 finally:
                     # Wait 1s and release the lock. Prevent anti-flood (max 30 msg/s in all chats)
                     sleep(1)
@@ -740,6 +765,8 @@ def cmd_disable(bot, update):
 ### Main function ###
 def main():
     ''' Main Function'''
+    # Logging info
+    logger.info('- Starting Bot, up and running.')
     # Create Bot event handler and get the dispatcher
     updater = Updater(CONST['TOKEN'])
     disp = updater.dispatcher
