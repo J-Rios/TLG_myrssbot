@@ -241,10 +241,6 @@ class CchatFeed(Thread):
                         # Debug
                         logger.info('- [%s] New entry:\n%s\n%s\n%s\n%s\n\n', self.name, \
                                 entry['Title'], entry['URL'], entry['Published'], entry['Summary'])
-                        logger.debug('- [%s] Last entries:', self.name)
-                        for l_entry in last_entries:
-                            logger.debug('\n%s\n%s\n%s\n%s\n\n', l_entry['Title'], l_entry['URL'], \
-                                    l_entry['Published'], l_entry['Summary'])
                         print('[{}] New entry:\n{}\n{}\n{}\n{}\n'.format(self.name, \
                                 entry['Title'], entry['URL'], entry['Published'], entry['Summary']))
                         # Send the message
