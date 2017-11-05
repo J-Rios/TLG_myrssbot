@@ -206,15 +206,14 @@ class CchatFeed(Thread):
                             feed_titl, TEXT[self.lang]['LINE'], entry_titl, \
                             last_entry['Published'], last_entry['Summary'])
                     # Send the message
-                    if bot_msg not in self.sent_list:
-                        sent = self.tlg_send_html(bot_msg, flood_control=False)
-                        if not sent:
-                            self.tlg_send_text(bot_msg, flood_control=False)
-                        # Add message to sent list and limit it to 50
-                        self.sent_list.append(bot_msg)
-                        if len(self.sent_list) > 50:
+                    sent = self.tlg_send_html(bot_msg, flood_control=False)
+                    if not sent:
+                        self.tlg_send_text(bot_msg, flood_control=False)
+                    # Add message to sent list and limit it to 1000
+                    if last_entry['URL'] not in self.sent_list:
+                        self.sent_list.append(last_entry['URL'])
+                        if len(self.sent_list) > 1000:
                             del self.sent_list[0]
-                    
                 else:
                     # Send a message to tell that this feed does not have any entry
                     feed_titl = '<a href="{}">{}</a>'.format(feed['URL'], feed['Title'])
@@ -241,18 +240,22 @@ class CchatFeed(Thread):
                         # Debug
                         logger.info('- [%s] New entry:\n%s\n%s\n%s\n%s\n\n', self.name, \
                                 entry['Title'], entry['URL'], entry['Published'], entry['Summary'])
+                        #logger.debug('- [%s] Last entries:', self.name)
+                        #for l_entry in last_entries:
+                        #    logger.debug('\n%s\n%s\n%s\n%s\n\n', l_entry['Title'], l_entry['URL'], \
+                        #            l_entry['Published'], l_entry['Summary'])
                         print('[{}] New entry:\n{}\n{}\n{}\n{}\n'.format(self.name, \
                                 entry['Title'], entry['URL'], entry['Published'], entry['Summary']))
                         # Send the message
-                        if bot_msg not in self.sent_list:
+                        if entry['URL'] not in self.sent_list:
                             sent = self.tlg_send_html(bot_msg)
                             if not sent:
                                 sent = self.tlg_send_text(bot_msg)
                             if sent:
                                 change = True
-                            # Add message to sent list and limit it to 50
-                            self.sent_list.append(bot_msg)
-                            if len(self.sent_list) > 50:
+                            # Add message to sent list and limit it to 1000
+                            self.sent_list.append(entry['URL'])
+                            if len(self.sent_list) > 1000:
                                 del self.sent_list[0]
                     if self.end:
                         break
