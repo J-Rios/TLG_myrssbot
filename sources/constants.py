@@ -9,9 +9,9 @@ Author:
 Creation date:
     23/08/2017
 Last modified date:
-    12/11/2017
+    15/11/2017
 Version:
-    1.6.0
+    1.6.1
 '''
 
 ####################################################################################################
@@ -19,8 +19,8 @@ Version:
 ### Constants ###
 CONST = {
     'DEVELOPER' : '@JoseTLG', # Developer Telegram contact
-    'DATE' : '10/11/2017', # Last modified date
-    'VERSION' : '1.6.0', # Actual version
+    'DATE' : '15/11/2017', # Last modified date
+    'VERSION' : '1.6.1', # Actual version
     'TOKEN' : 'XXXXXXXXX:XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', # Bot Token (get it from @BotFather)
     'REG_KEY' : 'registrationKey1234', # User registration Key (for signup and let use the Bot)
     'CHATS_DIR' : './data/chats', # Path of chats data directory
@@ -138,6 +138,9 @@ TEXT = {
             '\n' \
             'Example:\n' \
             '/remove https://www.kickstarter.com/projects/feed.atom',
+
+        'RM_FEED_FAIL' : \
+            'Feed remove fail. Invalid feed.',
 
         'RM_FEED' : \
             'Feed successfull removed.',
@@ -361,6 +364,9 @@ TEXT = {
             '\n' \
             'Ejemplo:\n' \
             '/remove https://www.kickstarter.com/projects/feed.atom',
+
+        'RM_FEED_FAIL' : \
+            'Fallo la eliminacion del feed. Feed invalido.',
 
         'RM_FEED' : \
             'Feed eliminado correctamente.',

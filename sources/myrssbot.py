@@ -9,9 +9,9 @@ Author:
 Creation date:
     23/08/2017
 Last modified date:
-    12/11/2017
+    15/11/2017
 Version:
-    1.6.0
+    1.6.1
 '''
 
 ####################################################################################################
@@ -163,7 +163,7 @@ class CchatFeed(Thread):
             if self.valid_feed(feedparse):
                 feed_to_add = {'Title': '', 'URL' : '', 'Entries' : []}
                 feed_to_add['Title'] = feedparse['feed']['title']
-                feed_to_add['URL'] = feedparse['feed']['link']
+                feed_to_add['URL'] = feed['URL']
                 # Determine number of entries to show
                 entries_to_show = len(feedparse['entries'])
                 # If there is any entry
@@ -247,19 +247,20 @@ class CchatFeed(Thread):
                                 entry['Title'], entry['URL'], entry['Published'], entry['Summary']))
                         # Check if there is search terms and the message contain any of them
                         json_feed = get_feed(self.chat_id, feed['URL'])
-                        if (not json_feed['SEARCH_TERMS']) or ((json_feed['SEARCH_TERMS']) and \
-                            (self.search_term_in_entry(entry, json_feed['SEARCH_TERMS']))):
-                            # Send the message
-                            if entry['URL'] not in self.sent_list:
-                                sent = self.tlg_send_html(bot_msg)
-                                if not sent:
-                                    sent = self.tlg_send_text(bot_msg)
-                                if sent:
-                                    change = True
-                                # Add message to sent list and limit it to 1000
-                                self.sent_list.append(entry['URL'])
-                                if len(self.sent_list) > 1000:
-                                    del self.sent_list[0]
+                        if json_feed:
+                            if (not json_feed['SEARCH_TERMS']) or ((json_feed['SEARCH_TERMS']) and \
+                                (self.search_term_in_entry(entry, json_feed['SEARCH_TERMS']))):
+                                # Send the message
+                                if entry['URL'] not in self.sent_list:
+                                    sent = self.tlg_send_html(bot_msg)
+                                    if not sent:
+                                        sent = self.tlg_send_text(bot_msg)
+                                    if sent:
+                                        change = True
+                                    # Add message to sent list and limit it to 1000
+                                    self.sent_list.append(entry['URL'])
+                                    if len(self.sent_list) > 1000:
+                                        del self.sent_list[0]
                     if self.end:
                         break
                 if self.end:
@@ -582,12 +583,13 @@ def get_feed(chat_id, feed_url):
     subs_feeds = subs_feeds[0]
     # Search for the feed and get json data
     feed = {}
-    for sub_feed in subs_feeds['Feeds']:
-        if sub_feed['URL'] == feed_url:
-            feed['Title'] = sub_feed['Title']
-            feed['URL'] = sub_feed['URL']
-            feed['SEARCH_TERMS'] = sub_feed['SEARCH_TERMS']
-            break
+    if subs_feeds:
+        for sub_feed in subs_feeds['Feeds']:
+            if sub_feed['URL'] == feed_url:
+                feed['Title'] = sub_feed['Title']
+                feed['URL'] = sub_feed['URL']
+                feed['SEARCH_TERMS'] = sub_feed['SEARCH_TERMS']
+                break
     # Return feed
     return feed
 
@@ -637,16 +639,20 @@ def remove_feed(chat_id, feed_url):
     # Get the feed and set json data
     feed = {}
     feedpars = parse(feed_url)
-    feed['Title'] = feedpars['feed']['title']
-    feed['URL'] = feed_url
-    feed['SEARCH_TERMS'] = []
-    for sub_feed in subs_feeds['Feeds']:
-        if sub_feed['URL'] == feed['URL']:
-            feed['SEARCH_TERMS'] = sub_feed['SEARCH_TERMS']
-            break
-    # Remove the specific feed and update json file
-    subs_feeds['Feeds'].remove(feed)
-    fjson_chat_feeds.update(subs_feeds, 'Chat_id')
+    if 'title' in feedpars['feed']:
+        feed['Title'] = feedpars['feed']['title']
+        feed['URL'] = feed_url
+        feed['SEARCH_TERMS'] = []
+        for sub_feed in subs_feeds['Feeds']:
+            if sub_feed['URL'] == feed['URL']:
+                feed['SEARCH_TERMS'] = sub_feed['SEARCH_TERMS']
+                break
+        # Remove the specific feed and update json file
+        subs_feeds['Feeds'].remove(feed)
+        fjson_chat_feeds.update(subs_feeds, 'Chat_id')
+        return True
+    else:
+        return False
 
 
 def add_srchterms(chat_id, feed_url, search_terms):
@@ -870,8 +876,10 @@ def cmd_remove(bot, update, args):
             if len(args) == 1: # If 1 argument has been provided
                 feed_url = args[0] # Get the feed url provided (argument)
                 if subscribed(chat_id, feed_url): # If user is subscribed to that feed
-                    remove_feed(chat_id, feed_url) # Remove from chat feeds file
-                    bot_msg = TEXT[lang]['RM_FEED'] # Bot response
+                    if remove_feed(chat_id, feed_url): # Remove from chat feeds file
+                        bot_msg = TEXT[lang]['RM_FEED'] # Bot response
+                    else: # Remove feed fail
+                        bot_msg = TEXT[lang]['RM_FEED_FAIL'] # Bot response
                 else: # No subscribed to that feed
                     bot_msg = TEXT[lang]['NO_SUBS'] # Bot response
             else: # No argument or more than 1 argument provided
