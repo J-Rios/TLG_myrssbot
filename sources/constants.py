@@ -9,9 +9,9 @@ Author:
 Creation date:
     23/08/2017
 Last modified date:
-    15/11/2017
+    22/11/2017
 Version:
-    1.6.1
+    1.6.2
 '''
 
 ####################################################################################################
@@ -19,15 +19,15 @@ Version:
 ### Constants ###
 CONST = {
     'DEVELOPER' : '@JoseTLG', # Developer Telegram contact
-    'DATE' : '15/11/2017', # Last modified date
-    'VERSION' : '1.6.1', # Actual version
+    'DATE' : '22/11/2017', # Last modified date
+    'VERSION' : '1.6.2', # Actual version
     'TOKEN' : 'XXXXXXXXX:XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', # Bot Token (get it from @BotFather)
     'REG_KEY' : 'registrationKey1234', # User registration Key (for signup and let use the Bot)
     'CHATS_DIR' : './data/chats', # Path of chats data directory
     'USERS_LIST_FILE' : './data/users_list.json', # Json file of signed-up users list
     'TLG_MSG_MAX_CHARS' : 4095, # Max number of characters per message allowed by Telegram
     'MAX_ENTRY_SUMMARY' : 2500, # Max number of characters in entry summary (description)
-    'T_FEEDS' : 300, # Time between feeds check (300s -> 5m)
+    'T_FEEDS' : 60, # Time between feeds check (60s -> 1m)
     'HTML_ANOYING_TAGS' : [ # HTML tags to remove from entries summary
         '<p>', '</p>', '<br>', '<br/>', '<br />', '</br>', '<hr>', '</hr>', '<pre>', '</pre>', \
         '<li>', '</li>', '<ul>', '</ul>', '<ol>', '</ol>', '<blockquote>', '</blockquote>', \
@@ -35,7 +35,8 @@ CONST = {
         '<strong>', '</strong>', '<html>', '</html>', '<head>', '</head>', '<body>', '</body>', \
         '<script>', '</script>', '<img>', '</img>', '<div>', '</div>', '<input>', '</input>', \
         '<span>', '</span>', '<form>', '</form>', '<cite>', '</cite>', '&lt;', '&gt;', '<!--', \
-        '<del>', '</del>', '<svg>', '</svg>', '-->', '<relative-time>', '</relative-time>'
+        '<del>', '</del>', '<svg>', '</svg>', '-->', '<relative-time>', '</relative-time>', \
+        '<dt>', '</dt>', '<dl>', '</dl>'
     ]
 }
 
@@ -218,11 +219,11 @@ TEXT = {
             'command /disable first.',
 
         'LINE' : \
-            '\n—————————————————\n',
+            '\n————————————————\n',
 
         'COMMANDS' : \
             'List of commands:\n' \
-            '—————————————————\n' \
+            '————————————————\n' \
             '/start - Show the initial information about the bot.\n' \
             '\n' \
             '/help - Show the help information.\n' \
@@ -447,11 +448,11 @@ TEXT = {
             'el comando /disable primero.',
 
         'LINE' : \
-            '\n—————————————————\n',
+            '\n————————————————\n',
 
         'COMMANDS' : \
             'Lista de comandos:\n' \
-            '—————————————————\n' \
+            '————————————————\n' \
             '/start - Muestra la información inicial sobre el Bot.\n' \
             '\n' \
             '/help - Muestra la informacion de ayuda.\n' \

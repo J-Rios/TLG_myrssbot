@@ -9,9 +9,9 @@ Author:
 Creation date:
     23/08/2017
 Last modified date:
-    15/11/2017
+    22/11/2017
 Version:
-    1.6.1
+    1.6.2
 '''
 
 ####################################################################################################
@@ -206,6 +206,11 @@ class CchatFeed(Thread):
                     bot_msg = '<b>Feed:</b>\n{}{}<b>Last entry:</b>\n\n{}\n{}\n\n{}'.format( \
                             feed_titl, TEXT[self.lang]['LINE'], entry_titl, \
                             last_entry['Published'], last_entry['Summary'])
+                    # Check and remove unwanted last </a> substring occurrence
+                    if ((bot_msg.count("<a href=")) + (bot_msg.count("<a class="))) != \
+                        bot_msg.count("</a>"):
+                        li = bot_msg.rsplit("</a>", 1)
+                        bot_msg = ''.join(li)
                     # Send the message
                     sent = self.tlg_send_html(bot_msg, flood_control=False)
                     if not sent:
@@ -216,10 +221,11 @@ class CchatFeed(Thread):
                         if len(self.sent_list) > 1000:
                             del self.sent_list[0]
                 else:
-                    # Send a message to tell that this feed does not have any entry
+                    # Prepare a message to send
                     feed_titl = '<a href="{}">{}</a>'.format(feed['URL'], feed['Title'])
                     bot_msg = '<b>Feed:</b>\n{}{}\n{}'.format(feed_titl, TEXT[self.lang]['LINE'], \
                             TEXT[self.lang]['NO_ENTRIES'])
+                    # Send a message to tell that this feed does not have any entry
                     sent = self.tlg_send_html(bot_msg, flood_control=False)
                     if not sent:
                         self.tlg_send_text(bot_msg, flood_control=False)
@@ -240,6 +246,11 @@ class CchatFeed(Thread):
                         entry['Summary'] = self.eolfixedsize(entry['Summary'], 3)
                         bot_msg = '{}{}{}\n{}\n\n{}'.format(feed_titl, TEXT[self.lang]['LINE'], \
                                 entry_titl, entry['Published'], entry['Summary'])
+                        # Check and remove unwanted last </a> substring occurrence
+                        if ((bot_msg.count("<a href=")) + (bot_msg.count("<a class="))) != \
+                            bot_msg.count("</a>"):
+                            li = bot_msg.rsplit("</a>", 1)
+                            bot_msg = ''.join(li)
                         # Debug
                         logger.info('- [%s] New entry:\n%s\n%s\n%s\n%s\n\n', self.name, \
                                 entry['Title'], entry['URL'], entry['Published'], entry['Summary'])
