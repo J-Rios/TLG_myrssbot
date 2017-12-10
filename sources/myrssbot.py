@@ -9,9 +9,9 @@ Author:
 Creation date:
     23/08/2017
 Last modified date:
-    22/11/2017
+    10/12/2017
 Version:
-    1.6.2
+    1.6.3
 '''
 
 ####################################################################################################
@@ -90,7 +90,7 @@ class CchatFeed(Thread):
     def run(self):
         '''thread method that run when the thread is launched (thread.start() is call)'''
         # Logging info
-        logger.info('- [%s] enabled and running.', self.name)
+        logger.info('- [%s] enabled and running.\n', self.name)
         # Notify that the FeedReader is enabled
         self.tlg_send_text(TEXT[lang]['FR_ENABLED'], flood_control=False)
         # Initial values of variables
@@ -177,8 +177,8 @@ class CchatFeed(Thread):
                                 entry['Published'] = feedparse['entries'][i]['published']
                             entry['Summary'] = feedparse['entries'][i]['summary']
                             entry['URL'] = feedparse['entries'][i]['link']
-                            # Fix summary text to be allowed by telegram
-                            entry['Summary'] = self.html_fix_tlg(entry['Summary'])
+                            # Fix title and summary text to be allowed by telegram
+                            entry = self.html_fix_tlg(entry)
                             # Truncate entry summary if it is more than MAX_ENTRY_SUMMARY chars
                             if len(entry['Summary']) > CONST['MAX_ENTRY_SUMMARY']:
                                 entry['Summary'] = entry['Summary'][0:CONST['MAX_ENTRY_SUMMARY']]
@@ -251,11 +251,6 @@ class CchatFeed(Thread):
                             bot_msg.count("</a>"):
                             li = bot_msg.rsplit("</a>", 1)
                             bot_msg = ''.join(li)
-                        # Debug
-                        logger.info('- [%s] New entry:\n%s\n%s\n%s\n%s\n\n', self.name, \
-                                entry['Title'], entry['URL'], entry['Published'], entry['Summary'])
-                        print('[{}] New entry:\n{}\n{}\n{}\n{}\n'.format(self.name, \
-                                entry['Title'], entry['URL'], entry['Published'], entry['Summary']))
                         # Check if there is search terms and the message contain any of them
                         json_feed = get_feed(self.chat_id, feed['URL'])
                         if json_feed:
@@ -263,6 +258,10 @@ class CchatFeed(Thread):
                                 (self.search_term_in_entry(entry, json_feed['SEARCH_TERMS']))):
                                 # Send the message
                                 if entry['URL'] not in self.sent_list:
+                                    # Print entry
+                                    #print('[{}] New entry:\n{}\n{}\n{}\n{}\n'.format(self.name, \
+                                            #entry['Title'], entry['URL'], entry['Published'], \
+                                            #entry['Summary']))
                                     sent = self.tlg_send_html(bot_msg)
                                     if not sent:
                                         sent = self.tlg_send_text(bot_msg)
@@ -336,20 +335,23 @@ class CchatFeed(Thread):
         return text_fixed
 
 
-    def html_fix_tlg(self, summary):
-        '''Remove all anoying HTML tags from entries summary'''
-        # Put the input into output
-        output = summary
+    def html_fix_tlg(self, entry):
+        '''Remove all anoying HTML tags from entries title and summary'''
+        # Remove bold and italic tags inside title
+        entry['Title'] = entry['Title'].replace('<b>', '')
+        entry['Title'] = entry['Title'].replace('</b>', '')
+        entry['Title'] = entry['Title'].replace('<i>', '')
+        entry['Title'] = entry['Title'].replace('</i>', '')
         # Remove every HTML tag
         for tag in CONST['HTML_ANOYING_TAGS']:
             if tag == '<br>' or tag == '<br />':
-                output = output.replace(tag, '\n')
+                entry['Summary'] = entry['Summary'].replace(tag, '\n')
             else:
-                output = output.replace(tag, '')
-            # Remove every HTML more complex structures (i.e. <img> to <img(.*?)>)
+                entry['Summary'] = entry['Summary'].replace(tag, '')
+            # Remove every HTML more complex structures (i.e. <img(.*?)> to <img>)
             tag_struct = '{}{}{}'.format(tag[:len(tag)-1], '(.*?)', tag[len(tag)-1:])
-            output = self.remove_complex_html(tag_struct, output)
-        return output
+            entry['Summary'] = self.remove_complex_html(tag_struct, entry['Summary'])
+        return entry
 
 
     def remove_complex_html(self, pattern, html_text):
@@ -385,8 +387,10 @@ class CchatFeed(Thread):
                 pass
             except TelegramError as error:
                 sent = False
-                logger.error('- %s\n%s\n%s\n\n', error, TEXT[self.lang]['LINE'], msg)
-                print('{}\n{}\n{}\n'.format(error, TEXT[self.lang]['LINE'], msg))
+                # Debug
+                logger.error('- [%s] %s\n%s\n%s\n', self.name, error, msg, \
+                        TEXT[self.lang]['LINE_LONG'])
+                print('[%s] %s\n%s\n%s\n', self.name, error, msg, TEXT[self.lang]['LINE_LONG'])
             finally:
                 # Wait 1s and release the lock. Prevent anti-flood (max 30 msg/s in all chats)
                 sleep(1)
@@ -416,8 +420,10 @@ class CchatFeed(Thread):
                 pass
             except TelegramError as error:
                 sent = False
-                logger.error('- %s\n%s\n%s\n\n', error, TEXT[self.lang]['LINE'], msg)
-                print('{}\n{}\n{}\n'.format(error, TEXT[self.lang]['LINE'], msg))
+                # Debug
+                logger.error('- [%s] %s\n%s\n%s\n', self.name, error, msg, \
+                        TEXT[self.lang]['LINE_LONG'])
+                print('[%s] %s\n%s\n%s\n', self.name, error, msg, TEXT[self.lang]['LINE_LONG'])
             finally:
                 # Wait 1s and release the lock. Prevent anti-flood (max 30 msg/s in all chats)
                 sleep(1)
@@ -438,8 +444,10 @@ class CchatFeed(Thread):
                     pass
                 except TelegramError as error:
                     sent = False
-                    logger.error('- %s\n%s\n%s\n\n', error, TEXT[self.lang]['LINE'], msg)
-                    print('{}\n{}\n{}\n'.format(error, TEXT[self.lang]['LINE'], msg))
+                    # Debug
+                    logger.error('- [%s] %s\n%s\n%s\n', self.name, error, msg, \
+                        TEXT[self.lang]['LINE_LONG'])
+                    print('[%s] %s\n%s\n%s\n', self.name, error, msg, TEXT[self.lang]['LINE_LONG'])
                 finally:
                     # Wait 1s and release the lock. Prevent anti-flood (max 30 msg/s in all chats)
                     sleep(1)
@@ -1079,7 +1087,7 @@ def cmd_disable(bot, update):
 def main():
     ''' Main Function'''
     # Logging info
-    logger.info('- Starting Bot, up and running.')
+    logger.info('- Starting Bot, up and running.\n')
     # Create Bot event handler and get the dispatcher
     updater = Updater(CONST['TOKEN'])
     disp = updater.dispatcher

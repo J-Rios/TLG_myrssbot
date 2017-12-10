@@ -9,9 +9,9 @@ Author:
 Creation date:
     23/08/2017
 Last modified date:
-    22/11/2017
+    10/12/2017
 Version:
-    1.6.2
+    1.6.3
 '''
 
 ####################################################################################################
@@ -19,8 +19,8 @@ Version:
 ### Constants ###
 CONST = {
     'DEVELOPER' : '@JoseTLG', # Developer Telegram contact
-    'DATE' : '22/11/2017', # Last modified date
-    'VERSION' : '1.6.2', # Actual version
+    'DATE' : '10/12/2017', # Last modified date
+    'VERSION' : '1.6.3', # Actual version
     'TOKEN' : 'XXXXXXXXX:XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', # Bot Token (get it from @BotFather)
     'REG_KEY' : 'registrationKey1234', # User registration Key (for signup and let use the Bot)
     'CHATS_DIR' : './data/chats', # Path of chats data directory
@@ -36,7 +36,7 @@ CONST = {
         '<script>', '</script>', '<img>', '</img>', '<div>', '</div>', '<input>', '</input>', \
         '<span>', '</span>', '<form>', '</form>', '<cite>', '</cite>', '&lt;', '&gt;', '<!--', \
         '<del>', '</del>', '<svg>', '</svg>', '-->', '<relative-time>', '</relative-time>', \
-        '<dt>', '</dt>', '<dl>', '</dl>'
+        '<dl>', '</dl>', '<dt>', '</dt>'
     ]
 }
 
@@ -220,6 +220,9 @@ TEXT = {
 
         'LINE' : \
             '\n————————————————\n',
+
+        'LINE_LONG' : \
+            '\n————————————————————————————————————————————————\n',
 
         'COMMANDS' : \
             'List of commands:\n' \
@@ -449,6 +452,9 @@ TEXT = {
 
         'LINE' : \
             '\n————————————————\n',
+
+        'LINE_LONG' : \
+            '\n————————————————————————————————————————————————\n',
 
         'COMMANDS' : \
             'Lista de comandos:\n' \
