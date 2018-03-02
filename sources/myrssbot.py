@@ -9,9 +9,9 @@ Author:
 Creation date:
     23/08/2017
 Last modified date:
-    10/12/2017
+    02/03/2018
 Version:
-    1.6.3
+    1.7.0
 '''
 
 ####################################################################################################
@@ -179,10 +179,6 @@ class CchatFeed(Thread):
                             entry['URL'] = feedparse['entries'][i]['link']
                             # Fix title and summary text to be allowed by telegram
                             entry = self.html_fix_tlg(entry)
-                            # Truncate entry summary if it is more than MAX_ENTRY_SUMMARY chars
-                            if len(entry['Summary']) > CONST['MAX_ENTRY_SUMMARY']:
-                                entry['Summary'] = entry['Summary'][0:CONST['MAX_ENTRY_SUMMARY']]
-                                entry['Summary'] = '{}...'.format(entry['Summary'])
                             # Add feed entry data to feed variable
                             feed_to_add['Entries'].append(entry)
                 # Add feed data to actual feeds variable
@@ -206,11 +202,6 @@ class CchatFeed(Thread):
                     bot_msg = '<b>Feed:</b>\n{}{}<b>Last entry:</b>\n\n{}\n{}\n\n{}'.format( \
                             feed_titl, TEXT[self.lang]['LINE'], entry_titl, \
                             last_entry['Published'], last_entry['Summary'])
-                    # Check and remove unwanted last </a> substring occurrence
-                    if ((bot_msg.count("<a href=")) + (bot_msg.count("<a class="))) != \
-                        bot_msg.count("</a>"):
-                        li = bot_msg.rsplit("</a>", 1)
-                        bot_msg = ''.join(li)
                     # Send the message
                     sent = self.tlg_send_html(bot_msg, flood_control=False)
                     if not sent:
@@ -246,11 +237,6 @@ class CchatFeed(Thread):
                         entry['Summary'] = self.eolfixedsize(entry['Summary'], 3)
                         bot_msg = '{}{}{}\n{}\n\n{}'.format(feed_titl, TEXT[self.lang]['LINE'], \
                                 entry_titl, entry['Published'], entry['Summary'])
-                        # Check and remove unwanted last </a> substring occurrence
-                        if ((bot_msg.count("<a href=")) + (bot_msg.count("<a class="))) != \
-                            bot_msg.count("</a>"):
-                            li = bot_msg.rsplit("</a>", 1)
-                            bot_msg = ''.join(li)
                         # Check if there is search terms and the message contain any of them
                         json_feed = get_feed(self.chat_id, feed['URL'])
                         if json_feed:
@@ -389,8 +375,9 @@ class CchatFeed(Thread):
                 sent = False
                 # Debug
                 logger.error('- [%s] %s\n%s\n%s\n', self.name, error, msg, \
-                        TEXT[self.lang]['LINE_LONG'])
-                print('[%s] %s\n%s\n%s\n', self.name, error, msg, TEXT[self.lang]['LINE_LONG'])
+                    TEXT[self.lang]['LINE_LONG'])
+                print('[{}] {}\n{}\n{}\n'.format(self.name, error, msg, \
+                    TEXT[self.lang]['LINE_LONG']))
             finally:
                 # Wait 1s and release the lock. Prevent anti-flood (max 30 msg/s in all chats)
                 sleep(1)
@@ -419,11 +406,14 @@ class CchatFeed(Thread):
             except TimedOut:
                 pass
             except TelegramError as error:
-                sent = False
+                # Ignore unsupported strange start tag empty ""
+                if "Can't parse entities: unsupported start tag \"\"" not in str(error):
+                    sent = False
                 # Debug
                 logger.error('- [%s] %s\n%s\n%s\n', self.name, error, msg, \
-                        TEXT[self.lang]['LINE_LONG'])
-                print('[%s] %s\n%s\n%s\n', self.name, error, msg, TEXT[self.lang]['LINE_LONG'])
+                    TEXT[self.lang]['LINE_LONG'])
+                print('[{}] {}\n{}\n{}\n'.format(self.name, error, msg, \
+                    TEXT[self.lang]['LINE_LONG']))
             finally:
                 # Wait 1s and release the lock. Prevent anti-flood (max 30 msg/s in all chats)
                 sleep(1)
@@ -432,6 +422,43 @@ class CchatFeed(Thread):
                 if flood_control:
                     sleep(12)
             # If send fail
+            if not sent:
+                # Get number of hyperlinks start pattern and end tags
+                hyperlink_start_pattern = "<a .*?href=.+?>"
+                pattern = re.compile(hyperlink_start_pattern, flags=re.DOTALL)
+                num_hyperlinks_start = len(re.findall(pattern, msg))
+                num_hyperlink_end = msg.count("</a>")
+                # If number of patterns is higher tan the end tags (incomplete hyperlink text)
+                if num_hyperlinks_start > num_hyperlink_end:
+                    # Get the last hyperlink occurrence index and remove it from the message
+                    last_hyperlink = re.findall(pattern, msg)[num_hyperlinks_start-1]
+                    last_hyperlink_index = msg.rfind(last_hyperlink)
+                    msg = msg[:last_hyperlink_index]
+                    # Try again to send the message with HTML Parsing
+                    tlg_send_lock.acquire()
+                    try:
+                        sent = True
+                        self.bot.send_message(chat_id=self.chat_id, text=msg, parse_mode=ParseMode.HTML)
+                    # Fail to parse HTML and send telegram message. Print & write the error in Log file
+                    except TimedOut:
+                        pass
+                    except TelegramError as error:
+                        # Ignore unsupported strange start tag empty ""
+                        if "Can't parse entities: unsupported start tag \"\"" not in str(error):
+                            sent = False
+                        # Debug
+                        logger.error('- [%s] %s\n%s\n%s\n', self.name, error, msg, \
+                            TEXT[self.lang]['LINE_LONG'])
+                        print('[{}] {}\n{}\n{}\n'.format(self.name, error, msg, \
+                            TEXT[self.lang]['LINE_LONG']))
+                    finally:
+                        # Wait 1s and release the lock. Prevent anti-flood (max 30 msg/s in all chats)
+                        sleep(1)
+                        tlg_send_lock.release()
+                        # Wait 12s. Prevent anti-flood system (max 20 msg/min in same chat)
+                        if flood_control:
+                            sleep(12)
+            # If send fail again
             if not sent:
                 # Add an end tag character (>) and try to send the message again
                 msg = '{}>'.format(msg)
@@ -443,11 +470,14 @@ class CchatFeed(Thread):
                 except TimedOut:
                     pass
                 except TelegramError as error:
-                    sent = False
+                    # Ignore unsupported strange start tag empty ""
+                    if "Can't parse entities: unsupported start tag \"\"" not in str(error):
+                        sent = False
                     # Debug
                     logger.error('- [%s] %s\n%s\n%s\n', self.name, error, msg, \
                         TEXT[self.lang]['LINE_LONG'])
-                    print('[%s] %s\n%s\n%s\n', self.name, error, msg, TEXT[self.lang]['LINE_LONG'])
+                    print('[{}] {}\n{}\n{}\n'.format(self.name, error, msg, \
+                        TEXT[self.lang]['LINE_LONG']))
                 finally:
                     # Wait 1s and release the lock. Prevent anti-flood (max 30 msg/s in all chats)
                     sleep(1)

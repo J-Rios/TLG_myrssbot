@@ -9,9 +9,9 @@ Author:
 Creation date:
     23/08/2017
 Last modified date:
-    10/12/2017
+    02/03/2018
 Version:
-    1.6.3
+    1.7.0
 '''
 
 ####################################################################################################
@@ -19,8 +19,8 @@ Version:
 ### Constants ###
 CONST = {
     'DEVELOPER' : '@JoseTLG', # Developer Telegram contact
-    'DATE' : '10/12/2017', # Last modified date
-    'VERSION' : '1.6.3', # Actual version
+    'DATE' : '02/03/2018', # Last modified date
+    'VERSION' : '1.7.0', # Actual version
     'TOKEN' : 'XXXXXXXXX:XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', # Bot Token (get it from @BotFather)
     'REG_KEY' : 'registrationKey1234', # User registration Key (for signup and let use the Bot)
     'CHATS_DIR' : './data/chats', # Path of chats data directory
@@ -36,7 +36,8 @@ CONST = {
         '<script>', '</script>', '<img>', '</img>', '<div>', '</div>', '<input>', '</input>', \
         '<span>', '</span>', '<form>', '</form>', '<cite>', '</cite>', '&lt;', '&gt;', '<!--', \
         '<del>', '</del>', '<svg>', '</svg>', '-->', '<relative-time>', '</relative-time>', \
-        '<dl>', '</dl>', '<dt>', '</dt>'
+        '<dl>', '</dl>', '<dt>', '</dt>', '<link>', '</link>', '<media:>', '<media:>', \
+        '</media:>'
     ]
 }
 
