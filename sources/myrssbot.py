@@ -64,7 +64,7 @@ class CchatFeed(Thread):
         self.lang = args[1]
         self.bot = args[2]
         self.end = False
-        self.lock_end = Lock()
+        #self.lock_end = Lock()
         self.sent_list = []
 
 
@@ -75,17 +75,18 @@ class CchatFeed(Thread):
 
     def finish(self):
         '''Set to finish the thread and stop it execution (called from TLG /disable command)'''
-        self.lock_end.acquire()
+        #self.lock_end.acquire()
         self.end = True
-        self.lock_end.release()
+        #self.lock_end.release()
 
 
     def must_finish(self):
         '''Get the finish status of the thread'''
-        self.lock_end.acquire()
+        #self.lock_end.acquire()
         end_thread = copy(self.end)
-        self.lock_end.release()
+        #self.lock_end.release()
         return end_thread
+
 
     def run(self):
         '''thread method that run when the thread is launched (thread.start() is call)'''
@@ -999,7 +1000,7 @@ def cmd_searchfor(bot, update, args):
                     else: # Correct search terms sintax ("")
                         del search_terms[:] # Clear the search terms list
                         while search_terms_str: # While search terms string is not empty
-                            term = find_between(search_terms_str, '"', '"') # Get 1º term between ""
+                            term = find_between(search_terms_str, '"', '"') # Get first term between ""
                             search_terms.append(term) # Add the term to the search term list
                             search_terms_str = search_terms_str.replace \
                                     ('"{}"'.format(term), '') # Remove term from string
@@ -1049,7 +1050,7 @@ def cmd_removesearch(bot, update, args):
                     else: # Correct search terms sintax ("")
                         del search_terms[:] # Clear the search terms list
                         while search_terms_str: # While search terms string is not empty
-                            term = find_between(search_terms_str, '"', '"') # Get 1º term between ""
+                            term = find_between(search_terms_str, '"', '"') # Get first term between ""
                             search_terms.append(term) # Add the term to the search term list
                             search_terms_str = search_terms_str.replace \
                                     ('"{}"'.format(term), '') # Remove term from string
