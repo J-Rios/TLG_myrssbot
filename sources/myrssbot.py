@@ -9,9 +9,9 @@ Author:
 Creation date:
     23/08/2017
 Last modified date:
-    02/03/2018
+    22/10/2018
 Version:
-    1.7.0
+    1.7.1
 '''
 
 ####################################################################################################
@@ -1096,10 +1096,9 @@ def cmd_disable(bot, update):
     global threads_lock # Use the global lock for active threads
     chat_id = update.message.chat_id # Get the chat id
     user_id = update.message.from_user.id # Get the user ID
-    removed = False # Set to false a feed removed variable
     if user_is_signedup(user_id): # If the user is signed-up
-        bot_msg = TEXT[lang]['DIS_NOT_ENABLED'] # Bot response
         threads_lock.acquire() # Lock the active threads variable
+        removed = False # Set to false a feed removed variable
         for thr_feed in threads: # For each active thread
             if thr_feed.isAlive(): # Make sure that the thread is really active
                 if chat_id == thr_feed.get_id(): # If the actual chat is in the active threads
@@ -1107,10 +1106,11 @@ def cmd_disable(bot, update):
                     threads.remove(thr_feed) # Remove actual thread from the active threads variable
                     removed = True # Set to true the removed feed variable
         threads_lock.release() # Release the active threads variable lock
+        if not removed: # If the feed was not found enabled
+            bot.send_message(chat_id=chat_id, text=TEXT[lang]['DIS_NOT_ENABLED']) # Bot reply
     else: # The user is not signed-up
         bot.send_message(chat_id=chat_id, text=TEXT[lang]['CMD_NOT_ALLOW']) # Bot reply
-    if not removed: # If the feed was not found enabled
-        bot.send_message(chat_id=chat_id, text=bot_msg) # Bot reply
+    
 
 ####################################################################################################
 

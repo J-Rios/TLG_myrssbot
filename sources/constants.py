@@ -9,9 +9,9 @@ Author:
 Creation date:
     23/08/2017
 Last modified date:
-    02/03/2018
+    22/10/2018
 Version:
-    1.7.0
+    1.7.1
 '''
 
 ####################################################################################################
@@ -19,8 +19,8 @@ Version:
 ### Constants ###
 CONST = {
     'DEVELOPER' : '@JoseTLG', # Developer Telegram contact
-    'DATE' : '02/03/2018', # Last modified date
-    'VERSION' : '1.7.0', # Actual version
+    'DATE' : '22/10/2018', # Last modified date
+    'VERSION' : '1.7.1', # Actual version
     'TOKEN' : 'XXXXXXXXX:XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX', # Bot Token (get it from @BotFather)
     'REG_KEY' : 'registrationKey1234', # User registration Key (for signup and let use the Bot)
     'CHATS_DIR' : './data/chats', # Path of chats data directory
