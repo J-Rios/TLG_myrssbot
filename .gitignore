@@ -1,5 +1,9 @@
-sources/.vscode/
-sources/__pycache__/
-sources/data/
+.vscode/
+**/.vscode/
+**/__pycache__/
 *.pyc
 *.log
+**/*.pyc
+**/*.log
+data/
+sources/data/
