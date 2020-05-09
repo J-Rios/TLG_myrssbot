@@ -9,9 +9,9 @@ Author:
 Creation date:
     23/08/2017
 Last modified date:
-    22/10/2018
+    10/05/2020
 Version:
-    1.7.1
+    1.8.0
 '''
 
 ####################################################################################################
@@ -25,9 +25,9 @@ from time import sleep, time
 from threading import Thread, Lock
 from collections import OrderedDict
 from feedparser import parse
-from telegram import ParseMode
-from telegram.ext import Updater, CommandHandler
-from telegram.error import TelegramError, TimedOut
+from telegram import (Update, ParseMode)
+from telegram.ext import (CallbackContext, Updater, CommandHandler)
+from telegram.error import (TelegramError, TimedOut)
 
 import TSjson
 from constants import CONST, TEXT
@@ -793,26 +793,31 @@ def rm_srchterms(chat_id, feed_url, search_terms):
 ####################################################################################################
 
 ### Received commands handlers ###
-def cmd_start(bot, update):
+def cmd_start(update: Update, context: CallbackContext):
     '''/start command handler'''
+    bot = context.bot
     chat_id = update.message.chat_id # Get the chat id
     bot.send_message(chat_id=chat_id, text=TEXT[lang]['START']) # Bot reply
 
 
-def cmd_help(bot, update):
+def cmd_help(update: Update, context: CallbackContext):
     '''/help command handler'''
+    bot = context.bot
     chat_id = update.message.chat_id # Get the chat id
     bot.send_message(chat_id=chat_id, text=TEXT[lang]['HELP']) # Bot reply
 
 
-def cmd_commands(bot, update):
+def cmd_commands(update: Update, context: CallbackContext):
     '''/commands command handler'''
+    bot = context.bot
     chat_id = update.message.chat_id # Get the chat id
     bot.send_message(chat_id=chat_id, text=TEXT[lang]['COMMANDS']) # Bot reply
 
 
-def cmd_language(bot, update, args):
+def cmd_language(update: Update, context: CallbackContext):
     '''/languaje command handler'''
+    bot = context.bot
+    args = context.args
     chat_id = update.message.chat_id # Get the chat id
     if len(args) == 1: # If 1 argument has been provided
         if user_is_signedup(update.message.from_user.id): # If the user is signed-up
@@ -832,8 +837,10 @@ def cmd_language(bot, update, args):
     bot.send_message(chat_id=chat_id, text=bot_msg) # Bot reply
 
 
-def cmd_signup(bot, update, args):
+def cmd_signup(update: Update, context: CallbackContext):
     '''/signup command handler'''
+    bot = context.bot
+    args = context.args
     chat_id = update.message.chat_id # Get the chat id
     if is_not_active(chat_id): # If the FeedReader thread of this chat is not running
         if len(args) == 1: # If 1 argument has been provided
@@ -853,8 +860,10 @@ def cmd_signup(bot, update, args):
     bot.send_message(chat_id=chat_id, text=bot_msg) # Bot reply
 
 
-def cmd_signdown(bot, update, args):
+def cmd_signdown(update: Update, context: CallbackContext):
     '''/signdown command handler'''
+    bot = context.bot
+    args = context.args
     chat_id = update.message.chat_id # Get the chat ID
     user_id = update.message.from_user.id # Get the user ID
     if is_not_active(chat_id): # If the FeedReader thread of this chat is not running
@@ -875,8 +884,9 @@ def cmd_signdown(bot, update, args):
     bot.send_message(chat_id=chat_id, text=bot_msg) # Bot reply
 
 
-def cmd_list(bot, update):
+def cmd_list(update: Update, context: CallbackContext):
     '''/list command handler'''
+    bot = context.bot
     bot_msg = 'Actual Feeds in chat:{}'.format(TEXT[lang]['LINE']) # Set initial bot response msg
     chat_id = update.message.chat_id # Get the chat ID
     fjson_chat_feeds = TSjson.TSjson('{}/{}.json'.format(CONST['CHATS_DIR'], chat_id)) # Chat file
@@ -889,8 +899,10 @@ def cmd_list(bot, update):
     bot.send_message(chat_id=chat_id, text=bot_msg, parse_mode=ParseMode.HTML) # Bot reply
 
 
-def cmd_add(bot, update, args):
+def cmd_add(update: Update, context: CallbackContext):
     '''/add command handler'''
+    bot = context.bot
+    args = context.args
     chat_id = update.message.chat_id # Get the chat ID
     if is_not_active(chat_id): # If the FeedReader thread of this chat is not running
         user_id = update.message.from_user.id # Get the user id
@@ -917,8 +929,10 @@ def cmd_add(bot, update, args):
     bot.send_message(chat_id=chat_id, text=bot_msg) # Bot reply
 
 
-def cmd_remove(bot, update, args):
+def cmd_remove(update: Update, context: CallbackContext):
     '''/remove command handler'''
+    bot = context.bot
+    args = context.args
     chat_id = update.message.chat_id # Get the chat ID
     user_id = update.message.from_user.id # Get the user ID
     if is_not_active(chat_id): # If the FeedReader thread of this chat is not running
@@ -941,8 +955,10 @@ def cmd_remove(bot, update, args):
     bot.send_message(chat_id=chat_id, text=bot_msg) # Bot reply
 
 
-def cmd_listsearch(bot, update, args):
+def cmd_listsearch(update: Update, context: CallbackContext):
     '''/listsearch command handler'''
+    bot = context.bot
+    args = context.args
     chat_id = update.message.chat_id # Get the chat ID
     if len(args) == 1: # If 1 argument has been provided
         feed_url = args[0] # Get the feed url provided (argument)
@@ -971,8 +987,10 @@ def cmd_listsearch(bot, update, args):
     bot.send_message(chat_id=chat_id, text=bot_msg, parse_mode=ParseMode.HTML) # Bot reply
 
 
-def cmd_searchfor(bot, update, args):
+def cmd_searchfor(update: Update, context: CallbackContext):
     '''/searchfor command handler'''
+    bot = context.bot
+    args = context.args
     chat_id = update.message.chat_id # Get the chat ID
     user_id = update.message.from_user.id # Get the user ID
     if is_not_active(chat_id): # If the FeedReader thread of this chat is not running
@@ -1021,8 +1039,10 @@ def cmd_searchfor(bot, update, args):
     bot.send_message(chat_id=chat_id, text=bot_msg, parse_mode=ParseMode.HTML) # Bot reply
 
 
-def cmd_removesearch(bot, update, args):
+def cmd_removesearch(update: Update, context: CallbackContext):
     '''/removesearch command handler'''
+    bot = context.bot
+    args = context.args
     chat_id = update.message.chat_id # Get the chat ID
     user_id = update.message.from_user.id # Get the user ID
     if is_not_active(chat_id): # If the FeedReader thread of this chat is not running
@@ -1067,8 +1087,9 @@ def cmd_removesearch(bot, update, args):
     bot.send_message(chat_id=chat_id, text=bot_msg, parse_mode=ParseMode.HTML) # Bot reply
 
 
-def cmd_enable(bot, update):
+def cmd_enable(update: Update, context: CallbackContext):
     '''/enable command handler'''
+    bot = context.bot
     global threads # Use global variable for active threads
     global threads_lock # Use the global lock for active threads
     chat_id = update.message.chat_id # Get the chat id
@@ -1090,8 +1111,9 @@ def cmd_enable(bot, update):
         bot.send_message(chat_id=chat_id, text=TEXT[lang]['CMD_NOT_ALLOW']) # Bot reply
 
 
-def cmd_disable(bot, update):
+def cmd_disable(update: Update, context: CallbackContext):
     '''/disable command handler'''
+    bot = context.bot
     global threads # Use global variable for active threads
     global threads_lock # Use the global lock for active threads
     chat_id = update.message.chat_id # Get the chat id
@@ -1120,7 +1142,7 @@ def main():
     # Logging info
     logger.info('- Starting Bot, up and running.\n')
     # Create Bot event handler and get the dispatcher
-    updater = Updater(CONST['TOKEN'])
+    updater = Updater(CONST["TOKEN"], use_context=True)
     disp = updater.dispatcher
     # Set the received commands handlers into the dispatcher
     disp.add_handler(CommandHandler("start", cmd_start))
@@ -1137,8 +1159,8 @@ def main():
     disp.add_handler(CommandHandler("removesearch", cmd_removesearch, pass_args=True))
     disp.add_handler(CommandHandler("enable", cmd_enable))
     disp.add_handler(CommandHandler("disable", cmd_disable))
-    # Start the Bot polling ignoring pending messages (clean=True)
-    updater.start_polling(clean=True)
+    # Launch the Bot ignoring pending messages (clean=True) and get all updates (allowed_uptades=[])
+    updater.start_polling(clean=True, allowed_updates=[])
     # Set the bot to idle (actual main-thread stops and wait for incoming messages for the handlers)
     updater.idle()
 
