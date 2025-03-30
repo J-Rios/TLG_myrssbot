@@ -26,7 +26,7 @@ CONST = {
     'CHATS_DIR' : './data/chats', # Path of chats data directory
     'USERS_LIST_FILE' : './data/users_list.json', # Json file of signed-up users list
     'TLG_MSG_MAX_CHARS' : 4095, # Max number of characters per message allowed by Telegram
-    'MAX_ENTRY_SUMMARY' : 2500, # Max number of characters in entry summary (description)
+    'MAX_ENTRY_SUMMARY' : 1000, # Max number of characters in entry summary (description)
     'T_FEEDS' : 60, # Time between feeds check (60s -> 1m)
     'HTML_ANOYING_TAGS' : [ # HTML tags to remove from entries summary
         '<p>', '</p>', '<br>', '<br/>', '<br />', '</br>', '<hr>', '</hr>', '<pre>', '</pre>', \

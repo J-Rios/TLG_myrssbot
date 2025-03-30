@@ -343,8 +343,8 @@ class CchatFeed(Thread):
         if entry['Title'][-1] == '\n':
             entry['Title'] = entry['Title'][:-1]
         entry['Summary'] = html_to_md.handle(entry['Summary'])
-        if len(entry['Summary']) >= 500:
-            entry['Summary'] = "{}...".format(entry['Summary'][:500])
+        if len(entry['Summary']) >= CONST["MAX_ENTRY_SUMMARY"]:
+            entry['Summary'] = "{}...".format(entry['Summary'][:CONST["MAX_ENTRY_SUMMARY"]])
         return entry
 
 
