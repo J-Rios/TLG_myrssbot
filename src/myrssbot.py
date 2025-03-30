@@ -9,9 +9,9 @@ Author:
 Creation date:
     23/08/2017
 Last modified date:
-    10/05/2020
+    30/03/2025
 Version:
-    1.8.0
+    1.8.1
 '''
 
 ####################################################################################################
@@ -1132,7 +1132,6 @@ def cmd_disable(update: Update, context: CallbackContext):
             bot.send_message(chat_id=chat_id, text=TEXT[lang]['DIS_NOT_ENABLED']) # Bot reply
     else: # The user is not signed-up
         bot.send_message(chat_id=chat_id, text=TEXT[lang]['CMD_NOT_ALLOW']) # Bot reply
-    
 
 ####################################################################################################
 
