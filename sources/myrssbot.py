@@ -29,7 +29,7 @@ from telegram import (Update, ParseMode)
 from telegram.ext import (CallbackContext, Updater, CommandHandler)
 from telegram.error import (TelegramError, TimedOut)
 
-import TSjson
+import tsjson as tsjson
 from constants import CONST, TEXT
 
 ####################################################################################################
@@ -140,7 +140,7 @@ class CchatFeed(Thread):
 
     def read_feeds(self):
         '''Read chat feeds from json file content'''
-        fjson_chat_feeds = TSjson.TSjson('{}/{}.json'.format(CONST['CHATS_DIR'], self.chat_id))
+        fjson_chat_feeds = tsjson.TSjson('{}/{}.json'.format(CONST['CHATS_DIR'], self.chat_id))
         chat_feeds = fjson_chat_feeds.read_content()
         return chat_feeds[0]['Feeds']
 
@@ -541,14 +541,14 @@ def signup_user(update):
     usr_data['Sign_date'] = (update.message.date).now().strftime('%Y-%m-%d %H:%M:%S')
     usr_data['Chats'] = [] # For future uses
     # Create TSjson object for list of users and write on them the data
-    fjson_usr_list = TSjson.TSjson(CONST['USERS_LIST_FILE'])
+    fjson_usr_list = tsjson.TSjson(CONST['USERS_LIST_FILE'])
     fjson_usr_list.write_content(usr_data)
 
 
 def signdown_user(user_id):
     '''Function for sign-down a user from the system (remove from users list file)'''
     # Create TSjson object for list of users and remove the user from content
-    fjson_usr_list = TSjson.TSjson(CONST['USERS_LIST_FILE'])
+    fjson_usr_list = tsjson.TSjson(CONST['USERS_LIST_FILE'])
     fjson_usr_list.remove_by_uide(user_id, 'User_id')
 
 
@@ -557,7 +557,7 @@ def user_is_signedup(user_id):
     # If users list file exists, search for the user by ID and return if the user is in the file
     signedup = False
     if path.exists(CONST['USERS_LIST_FILE']):
-        fjson_usr_list = TSjson.TSjson(CONST['USERS_LIST_FILE'])
+        fjson_usr_list = tsjson.TSjson(CONST['USERS_LIST_FILE'])
         search_result = fjson_usr_list.search_by_uide(user_id, 'User_id')
         if search_result['found']:
             signedup = True
@@ -570,7 +570,7 @@ def subscribed(chat_id, feed_url):
     _subscribed = False
     chat_file = '{}/{}.json'.format(CONST['CHATS_DIR'], chat_id)
     if path.exists(chat_file):
-        fjson_chat_feeds = TSjson.TSjson(chat_file)
+        fjson_chat_feeds = tsjson.TSjson(chat_file)
         subs_feeds = fjson_chat_feeds.read_content()
         if subs_feeds:
             subs_feeds = subs_feeds[0]
@@ -587,7 +587,7 @@ def any_subscription(chat_id):
     any_sub = False
     chat_file = '{}/{}.json'.format(CONST['CHATS_DIR'], chat_id)
     if path.exists(chat_file):
-        fjson_chat_feeds = TSjson.TSjson(chat_file)
+        fjson_chat_feeds = tsjson.TSjson(chat_file)
         subs_feeds = fjson_chat_feeds.read_content()
         if subs_feeds:
             subs_feeds = subs_feeds[0]
@@ -628,7 +628,7 @@ def find_between(string, first, last):
 def get_feed(chat_id, feed_url):
     '''Function to get (search and read) a feed from the chat feeds file'''
     # Create TSjson object for feeds of chat file and read the content
-    fjson_chat_feeds = TSjson.TSjson('{}/{}.json'.format(CONST['CHATS_DIR'], chat_id))
+    fjson_chat_feeds = tsjson.TSjson('{}/{}.json'.format(CONST['CHATS_DIR'], chat_id))
     subs_feeds = fjson_chat_feeds.read_content()
     subs_feeds = subs_feeds[0]
     # Search for the feed and get json data
@@ -647,7 +647,7 @@ def get_feed(chat_id, feed_url):
 def add_feed(user_id, chat_id, feed_title, feed_url):
     '''Function to add (subscribe) a new url feed to the chat feeds file'''
     # Read user chats and add the actual chat to it
-    fjson_usr_list = TSjson.TSjson(CONST['USERS_LIST_FILE'])
+    fjson_usr_list = tsjson.TSjson(CONST['USERS_LIST_FILE'])
     usr_list = fjson_usr_list.read_content()
     for usr in usr_list:
         if usr['User_id'] == user_id:
@@ -656,7 +656,7 @@ def add_feed(user_id, chat_id, feed_title, feed_url):
                 usr['Chats'].append(chat_id)
                 fjson_usr_list.update(usr, 'User_id')
     # Read chat feeds file and add the new feed url to it
-    fjson_chat_feeds = TSjson.TSjson('{}/{}.json'.format(CONST['CHATS_DIR'], chat_id))
+    fjson_chat_feeds = tsjson.TSjson('{}/{}.json'.format(CONST['CHATS_DIR'], chat_id))
     subs_feeds = fjson_chat_feeds.read_content()
     # If there is any feed in the file
     if subs_feeds:
@@ -683,7 +683,7 @@ def add_feed(user_id, chat_id, feed_title, feed_url):
 def remove_feed(chat_id, feed_url):
     '''Function to remove (unsubscribe) a feed from the chat feeds file'''
     # Create TSjson object for feeds of chat file and read the content
-    fjson_chat_feeds = TSjson.TSjson('{}/{}.json'.format(CONST['CHATS_DIR'], chat_id))
+    fjson_chat_feeds = tsjson.TSjson('{}/{}.json'.format(CONST['CHATS_DIR'], chat_id))
     subs_feeds = fjson_chat_feeds.read_content()
     subs_feeds = subs_feeds[0]
     # Get the feed and set json data
@@ -708,7 +708,7 @@ def remove_feed(chat_id, feed_url):
 def add_srchterms(chat_id, feed_url, search_terms):
     '''Function to add search terms to feed'''
     # Read chat feeds file and read the content
-    fjson_chat_feeds = TSjson.TSjson('{}/{}.json'.format(CONST['CHATS_DIR'], chat_id))
+    fjson_chat_feeds = tsjson.TSjson('{}/{}.json'.format(CONST['CHATS_DIR'], chat_id))
     subs_feeds = fjson_chat_feeds.read_content()
     subs_feeds = subs_feeds[0]
     # Get the json feed
@@ -751,7 +751,7 @@ def add_srchterms(chat_id, feed_url, search_terms):
 def rm_srchterms(chat_id, feed_url, search_terms):
     '''Function to remove search terms of feed'''
     # Read chat feeds file and read the content
-    fjson_chat_feeds = TSjson.TSjson('{}/{}.json'.format(CONST['CHATS_DIR'], chat_id))
+    fjson_chat_feeds = tsjson.TSjson('{}/{}.json'.format(CONST['CHATS_DIR'], chat_id))
     subs_feeds = fjson_chat_feeds.read_content()
     subs_feeds = subs_feeds[0]
     # Get the json feed
@@ -889,7 +889,7 @@ def cmd_list(update: Update, context: CallbackContext):
     bot = context.bot
     bot_msg = 'Actual Feeds in chat:{}'.format(TEXT[lang]['LINE']) # Set initial bot response msg
     chat_id = update.message.chat_id # Get the chat ID
-    fjson_chat_feeds = TSjson.TSjson('{}/{}.json'.format(CONST['CHATS_DIR'], chat_id)) # Chat file
+    fjson_chat_feeds = tsjson.TSjson('{}/{}.json'.format(CONST['CHATS_DIR'], chat_id)) # Chat file
     chat_feeds = fjson_chat_feeds.read_content() # Read the content of the file
     if chat_feeds: # If any feed in chat
         chat_feeds = chat_feeds[0] # Get the feeds
@@ -962,7 +962,7 @@ def cmd_listsearch(update: Update, context: CallbackContext):
     chat_id = update.message.chat_id # Get the chat ID
     if len(args) == 1: # If 1 argument has been provided
         feed_url = args[0] # Get the feed url provided (argument)
-        fjson_chat_feeds = TSjson.TSjson('{}/{}.json'.format(CONST['CHATS_DIR'], chat_id)) # Chat f
+        fjson_chat_feeds = tsjson.TSjson('{}/{}.json'.format(CONST['CHATS_DIR'], chat_id)) # Chat f
         chat_feeds = fjson_chat_feeds.read_content() # Read the content of the file
         if chat_feeds: # If any feed in chat
             chat_feeds = chat_feeds[0] # Get the feeds
