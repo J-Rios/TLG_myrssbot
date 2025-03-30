@@ -1,4 +1,5 @@
 .vscode/
+.venv/
 **/.vscode/
 **/__pycache__/
 *.pyc
@@ -6,4 +7,4 @@
 **/*.pyc
 **/*.log
 data/
-sources/data/
+src/data/
