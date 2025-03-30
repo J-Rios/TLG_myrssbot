@@ -11,7 +11,7 @@ Creation date:
 Last modified date:
     30/03/2025
 Version:
-    1.8.1
+    1.8.2
 '''
 
 ####################################################################################################
@@ -25,6 +25,7 @@ from time import sleep, time
 from threading import Thread, Lock
 from collections import OrderedDict
 from feedparser import parse
+from html2text import HTML2Text
 from telegram import (Update, ParseMode)
 from telegram.ext import (CallbackContext, Updater, CommandHandler)
 from telegram.error import (TelegramError, TimedOut)
@@ -178,8 +179,8 @@ class CchatFeed(Thread):
                                 entry['Published'] = feedparse['entries'][i]['published']
                             entry['Summary'] = feedparse['entries'][i]['summary']
                             entry['URL'] = feedparse['entries'][i]['link']
-                            # Fix title and summary text to be allowed by telegram
-                            entry = self.html_fix_tlg(entry)
+                            # Parse to Markdown
+                            entry = self.html_2_markdown(entry)
                             # Add feed entry data to feed variable
                             feed_to_add['Entries'].append(entry)
                 # Add feed data to actual feeds variable
@@ -192,19 +193,24 @@ class CchatFeed(Thread):
         # If any feed, for each feed in feeds, if any entry in feed
         if feeds:
             for feed in feeds:
+                feed_url = self.escape_markdown_v2(feed['URL'])
+                feed_title = self.escape_markdown_v2(feed['Title'])
+                feed_title = '[{}]({})'.format(feed_title, feed_url)
                 if feed['Entries']:
                     # Get the last entry and prepare the bot response message
                     last_entry = feed['Entries'][len(feed['Entries']) - 1]
-                    feed_titl = '<a href="{}">{}</a>'.format(feed['URL'], feed['Title'])
-                    entry_titl = '<a href="{}">{}</a>'.format(last_entry['URL'], \
-                            last_entry['Title'])
+                    entry_url = self.escape_markdown_v2(last_entry['URL'])
+                    entry_title = self.escape_markdown_v2(last_entry['Title'])
+                    entry_title = '[{}]({})'.format(entry_title, entry_url)
+                    entry_date = self.escape_markdown_v2(last_entry['Published'])
+                    entry_summary = self.escape_markdown_v2(last_entry['Summary'])
                     # Reduce consecutive '\n' characters to maximum '\n\n\n'
                     last_entry['Summary'] = self.eolfixedsize(last_entry['Summary'], 3)
-                    bot_msg = '<b>Feed:</b>\n{}{}<b>Last entry:</b>\n\n{}\n{}\n\n{}'.format( \
-                            feed_titl, TEXT[self.lang]['LINE'], entry_titl, \
-                            last_entry['Published'], last_entry['Summary'])
+                    bot_msg = '**Feed:**\n{}{}**Last entry:**\n\n{}\n{}\n\n{}'.format( \
+                            feed_title, TEXT[self.lang]['LINE'], entry_title, \
+                            entry_date, entry_summary)
                     # Send the message
-                    sent = self.tlg_send_html(bot_msg, flood_control=False)
+                    sent = self.tlg_send_md(bot_msg, flood_control=False)
                     if not sent:
                         self.tlg_send_text(bot_msg, flood_control=False)
                     # Add message to sent list and limit it to 1000
@@ -214,11 +220,10 @@ class CchatFeed(Thread):
                             del self.sent_list[0]
                 else:
                     # Prepare a message to send
-                    feed_titl = '<a href="{}">{}</a>'.format(feed['URL'], feed['Title'])
-                    bot_msg = '<b>Feed:</b>\n{}{}\n{}'.format(feed_titl, TEXT[self.lang]['LINE'], \
+                    bot_msg = '**Feed:**\n{}{}\n{}'.format(feed_title, TEXT[self.lang]['LINE'], \
                             TEXT[self.lang]['NO_ENTRIES'])
                     # Send a message to tell that this feed does not have any entry
-                    sent = self.tlg_send_html(bot_msg, flood_control=False)
+                    sent = self.tlg_send_md(bot_msg, flood_control=False)
                     if not sent:
                         self.tlg_send_text(bot_msg, flood_control=False)
 
@@ -228,16 +233,22 @@ class CchatFeed(Thread):
         change = False
         for feed in actual_feeds:
             if feed['Entries']:
+                feed_url = self.escape_markdown_v2(feed['URL'])
+                feed_title = self.escape_markdown_v2(feed['Title'])
+                feed_title = '[{}]({})'.format(feed_title, feed_url)
                 for entry in feed['Entries']:
                     # If there is not an entry with that title in last_entries
                     if not self.entry_in_last(entry, last_entries):
                         # Send the telegram message/s
-                        feed_titl = '<a href="{}">{}</a>'.format(feed['URL'], feed['Title'])
-                        entry_titl = '<a href="{}">{}</a>'.format(entry['URL'], entry['Title'])
+                        entry_url = self.escape_markdown_v2(entry['URL'])
+                        entry_title = self.escape_markdown_v2(entry['Title'])
+                        entry_title = '[{}]({})'.format(entry_title, entry_url)
+                        entry_date = self.escape_markdown_v2( entry['Published'])
+                        entry_summary = self.escape_markdown_v2(entry['Summary'])
                         # Reduce consecutive '\n' characters to maximum '\n\n\n'
-                        entry['Summary'] = self.eolfixedsize(entry['Summary'], 3)
-                        bot_msg = '{}{}{}\n{}\n\n{}'.format(feed_titl, TEXT[self.lang]['LINE'], \
-                                entry_titl, entry['Published'], entry['Summary'])
+                        entry['Summary'] = self.eolfixedsize(entry_summary, 3)
+                        bot_msg = '{}{}{}\n{}\n\n{}'.format(feed_title, TEXT[self.lang]['LINE'], \
+                                entry_title, entry_date, entry_summary)
                         # Check if there is search terms and the message contain any of them
                         json_feed = get_feed(self.chat_id, feed['URL'])
                         if json_feed:
@@ -245,11 +256,7 @@ class CchatFeed(Thread):
                                 (self.search_term_in_entry(entry, json_feed['SEARCH_TERMS']))):
                                 # Send the message
                                 if entry['URL'] not in self.sent_list:
-                                    # Print entry
-                                    #print('[{}] New entry:\n{}\n{}\n{}\n{}\n'.format(self.name, \
-                                            #entry['Title'], entry['URL'], entry['Published'], \
-                                            #entry['Summary']))
-                                    sent = self.tlg_send_html(bot_msg)
+                                    sent = self.tlg_send_md(bot_msg)
                                     if not sent:
                                         sent = self.tlg_send_text(bot_msg)
                                     if sent:
@@ -322,40 +329,29 @@ class CchatFeed(Thread):
         return text_fixed
 
 
-    def html_fix_tlg(self, entry):
+    def html_2_markdown(self, entry):
         '''Remove all anoying HTML tags from entries title and summary'''
-        # Remove bold and italic tags inside title
-        entry['Title'] = entry['Title'].replace('<b>', '')
-        entry['Title'] = entry['Title'].replace('</b>', '')
-        entry['Title'] = entry['Title'].replace('<i>', '')
-        entry['Title'] = entry['Title'].replace('</i>', '')
-        # Remove every HTML tag
-        for tag in CONST['HTML_ANOYING_TAGS']:
-            if tag == '<br>' or tag == '<br />':
-                entry['Summary'] = entry['Summary'].replace(tag, '\n')
-            else:
-                entry['Summary'] = entry['Summary'].replace(tag, '')
-            # Remove every HTML more complex structures (i.e. <img(.*?)> to <img>)
-            tag_struct = '{}{}{}'.format(tag[:len(tag)-1], '(.*?)', tag[len(tag)-1:])
-            entry['Summary'] = self.remove_complex_html(tag_struct, entry['Summary'])
+        # Setup HTML to Markdown converter
+        html_to_md = HTML2Text()
+        html_to_md.body_width = 0  # Avoid forced new lines
+        html_to_md.ignore_links = True  # Remove Links
+        html_to_md.ignore_images = True  # Remove images
+        html_to_md.ignore_emphasis = True  # Remove bold and italic
+        # Convert Entry Title and Summary HTML to Markdown
+        entry['Title'] = html_to_md.handle(entry['Title'])
+        # Remove \n character added by htm_to_md
+        if entry['Title'][-1] == '\n':
+            entry['Title'] = entry['Title'][:-1]
+        entry['Summary'] = html_to_md.handle(entry['Summary'])
+        if len(entry['Summary']) >= 500:
+            entry['Summary'] = "{}...".format(entry['Summary'][:500])
         return entry
 
 
-    def remove_complex_html(self, pattern, html_text):
-        ''' Remove complex anoying HTML structures'''
-        output = html_text
-        # Create the pattern element and search for it in the text
-        _pattern = re.compile(pattern)
-        result = _pattern.search(output)
-        # If there is a search result (pattern found)
-        if result:
-            # Get the to-delete substring and replace it to empty in the original text
-            to_del = result.group(0)
-            output = output.replace(to_del, '')
-            # Try to do it again (recursively, maybe there is more same structures in the text)
-            output = self.remove_complex_html(pattern, output)
-        # If there is no search result for that pattern, return the modify text
-        return output
+    def escape_markdown_v2(self, text):
+        '''Escape Markdownv2 special characters Telegram.'''
+        escape_chars = r"_*[]()~`>#+-=|{}.!"
+        return re.sub(f"([{re.escape(escape_chars)}])", r"\\\1", text)
 
 
     def tlg_send_text(self, message, flood_control=True):
@@ -391,25 +387,21 @@ class CchatFeed(Thread):
                 break
         return sent
 
-
-    def tlg_send_html(self, message, flood_control=True):
-        '''Try to send a Telegram message with HTML content'''
+    def tlg_send_md(self, message, flood_control=True):
+        '''Try to send a Telegram message with Markdown-V2 content'''
         sent = False
-        # Split the message if it is higher than the TLG message legth limit
+        # Split the message if it is higher than the TLG message length limit
         messages = self.split_tlg_msgs(message)
         for msg in messages:
             # Try to send the message with HTML Parsing
             tlg_send_lock.acquire()
             try:
                 sent = True
-                self.bot.send_message(chat_id=self.chat_id, text=msg, parse_mode=ParseMode.HTML)
+                self.bot.send_message(chat_id=self.chat_id, text=msg, parse_mode=ParseMode.MARKDOWN_V2)
             # Fail to parse HTML and send telegram message. Print & write the error in Log file
             except TimedOut:
                 pass
             except TelegramError as error:
-                # Ignore unsupported strange start tag empty ""
-                if "Can't parse entities: unsupported start tag \"\"" not in str(error):
-                    sent = False
                 # Debug
                 logger.error('- [%s] %s\n%s\n%s\n', self.name, error, msg, \
                     TEXT[self.lang]['LINE_LONG'])
@@ -422,70 +414,6 @@ class CchatFeed(Thread):
                 # Wait 12s. Prevent anti-flood system (max 20 msg/min in same chat)
                 if flood_control:
                     sleep(12)
-            # If send fail
-            if not sent:
-                # Get number of hyperlinks start pattern and end tags
-                hyperlink_start_pattern = "<a .*?href=.+?>"
-                pattern = re.compile(hyperlink_start_pattern, flags=re.DOTALL)
-                num_hyperlinks_start = len(re.findall(pattern, msg))
-                num_hyperlink_end = msg.count("</a>")
-                # If number of patterns is higher tan the end tags (incomplete hyperlink text)
-                if num_hyperlinks_start > num_hyperlink_end:
-                    # Get the last hyperlink occurrence index and remove it from the message
-                    last_hyperlink = re.findall(pattern, msg)[num_hyperlinks_start-1]
-                    last_hyperlink_index = msg.rfind(last_hyperlink)
-                    msg = msg[:last_hyperlink_index]
-                    # Try again to send the message with HTML Parsing
-                    tlg_send_lock.acquire()
-                    try:
-                        sent = True
-                        self.bot.send_message(chat_id=self.chat_id, text=msg, parse_mode=ParseMode.HTML)
-                    # Fail to parse HTML and send telegram message. Print & write the error in Log file
-                    except TimedOut:
-                        pass
-                    except TelegramError as error:
-                        # Ignore unsupported strange start tag empty ""
-                        if "Can't parse entities: unsupported start tag \"\"" not in str(error):
-                            sent = False
-                        # Debug
-                        logger.error('- [%s] %s\n%s\n%s\n', self.name, error, msg, \
-                            TEXT[self.lang]['LINE_LONG'])
-                        print('[{}] {}\n{}\n{}\n'.format(self.name, error, msg, \
-                            TEXT[self.lang]['LINE_LONG']))
-                    finally:
-                        # Wait 1s and release the lock. Prevent anti-flood (max 30 msg/s in all chats)
-                        sleep(1)
-                        tlg_send_lock.release()
-                        # Wait 12s. Prevent anti-flood system (max 20 msg/min in same chat)
-                        if flood_control:
-                            sleep(12)
-            # If send fail again
-            if not sent:
-                # Add an end tag character (>) and try to send the message again
-                msg = '{}>'.format(msg)
-                tlg_send_lock.acquire()
-                try:
-                    sent = True
-                    self.bot.send_message(chat_id=self.chat_id, text=msg, parse_mode=ParseMode.HTML)
-                # Fail to parse HTML and send telegram message. Print & write the error in Log file
-                except TimedOut:
-                    pass
-                except TelegramError as error:
-                    # Ignore unsupported strange start tag empty ""
-                    if "Can't parse entities: unsupported start tag \"\"" not in str(error):
-                        sent = False
-                    # Debug
-                    logger.error('- [%s] %s\n%s\n%s\n', self.name, error, msg, \
-                        TEXT[self.lang]['LINE_LONG'])
-                    print('[{}] {}\n{}\n{}\n'.format(self.name, error, msg, \
-                        TEXT[self.lang]['LINE_LONG']))
-                finally:
-                    # Wait 1s and release the lock. Prevent anti-flood (max 30 msg/s in all chats)
-                    sleep(1)
-                    tlg_send_lock.release()
-                    # Wait 12s. Prevent anti-flood system (max 20 msg/min in same chat)
-                    if flood_control:
-                        sleep(12)
             # If the sent fail, break
             if not sent:
                 break
@@ -732,7 +660,7 @@ def add_srchterms(chat_id, feed_url, search_terms):
     subs_feeds['Feeds'].append(feed)
     fjson_chat_feeds.update(subs_feeds, 'Chat_id')
     # Check added terms and determine bot return message
-    feed_titl = '<a href="{}">{}</a>'.format(feed['URL'], feed['Title']) # Get the title
+    feed_titl = '[{}]({})'.format(feed['Title'], feed['URL']) # Get the title
     bot_msg = '{}{}'.format(feed_titl, TEXT[lang]['LINE'])
     if not num_terms_add:
         bot_msg = '{}{}'.format(bot_msg, TEXT[lang]['SRCH_TERMS_ALL_BEFORE'])
@@ -775,7 +703,7 @@ def rm_srchterms(chat_id, feed_url, search_terms):
     subs_feeds['Feeds'].append(feed)
     fjson_chat_feeds.update(subs_feeds, 'Chat_id')
     # Check removed terms and determine bot return message
-    feed_titl = '<a href="{}">{}</a>'.format(feed['URL'], feed['Title']) # Get the title
+    feed_titl = '[{}]({})'.format(feed['Title'], feed['URL']) # Get the title
     bot_msg = '{}{}'.format(feed_titl, TEXT[lang]['LINE'])
     if not num_terms_rm:
         bot_msg = '{}{}'.format(bot_msg, TEXT[lang]['RMSRCH_TERMS_NOT_FOUND'])
@@ -894,7 +822,7 @@ def cmd_list(update: Update, context: CallbackContext):
     if chat_feeds: # If any feed in chat
         chat_feeds = chat_feeds[0] # Get the feeds
         for feed in chat_feeds['Feeds']: # For each feed
-            feed_titl = '<a href="{}">{}</a>'.format(feed['URL'], feed['Title']) # Get the title
+            feed_titl = '[{}]({})'.format(feed['Title'], feed['URL']) # Get the title
             bot_msg = '{}{}\n\n'.format(bot_msg, feed_titl) # Bot response
     bot.send_message(chat_id=chat_id, text=bot_msg, parse_mode=ParseMode.HTML) # Bot reply
 
@@ -972,7 +900,7 @@ def cmd_listsearch(update: Update, context: CallbackContext):
                     feed_found = feed # Get feed
                     break # Break and exit the foor loop
             if feed_found: # If the feed was found
-                feed_titl = '<a href="{}">{}</a>'.format(feed['URL'], feed['Title']) # Get the title
+                feed_titl = '[{}]({})'.format(feed['Title'], feed['URL']) # Get the title
                 bot_msg = 'Actual Search terms in feed:{}'.format(TEXT[lang]['LINE']) # Bot response
                 bot_msg = '{}{}\n\n'.format(bot_msg, feed_titl) # Bot response
                 for term in feed_found['SEARCH_TERMS']: # For each search term
